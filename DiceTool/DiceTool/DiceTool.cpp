@@ -217,7 +217,7 @@ void GenerateEccKeypair(
         PrintHex(num);
     }
     wprintf(L"\n");
-    wprintf(L"Public.x:\n");
+    wprintf(L"Public.y:\n");
     {
         std::vector<BYTE> num(32);
         BigValToBigInt(num.data(), &pub.y);
@@ -444,7 +444,8 @@ void PrintDiceApplicationInfo(
 void RunGEK(std::unordered_map<std::wstring, std::wstring> param)
 {
     std::wstring keyFileName(param.find(L"00")->second);
-    keyFileName.resize(keyFileName.find('.', 0));
+    size_t dot = keyFileName.find('.', 0);
+    if(dot != std::wstring::npos) keyFileName.resize(dot);
     GenerateEccKeypair(keyFileName);
 }
 
@@ -551,9 +552,9 @@ int wmain(int argc, const wchar_t** argv)
 {
     try
     {
-        if (argc <= 1)
+        if (argc <= 2)
         {
-            throw;
+            throw ERROR_INVALID_PARAMETER;
         }
         std::wstring cmd(argv[1]);
         WSTR_TO_LOWER(cmd);
@@ -583,7 +584,7 @@ int wmain(int argc, const wchar_t** argv)
         {
             RunGEK(param);
         }
-        if ((cmd == std::wstring(L"pai")) && (param.size() == 1))
+        else if ((cmd == std::wstring(L"pai")) && (param.size() == 1))
         {
             RunPAI(param);
         }
