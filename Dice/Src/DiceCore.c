@@ -7,6 +7,71 @@
 //PDiceFuse_t pDiceEEProm = (PDiceFuse_t)DICEDATAEEPROMSTART;
 FIREWALL_InitTypeDef fw_init = {0};
 
+DICE_STATUS DiceLockDown(void)
+{
+    DICE_STATUS retVal = DICE_SUCCESS;
+    FLASH_OBProgramInitTypeDef ob = {0};
+    HAL_FLASHEx_OBGetConfig(&ob);
+
+    if((ob.RDPLevel != OB_RDP_LEVEL_0) &&
+       (ob.WRPSector != (OB_WRP_Pages0to31 | OB_WRP_Pages32to63 | OB_WRP_Pages64to95 | OB_WRP_Pages96to127 | OB_WRP_Pages128to159 | OB_WRP_Pages160to191 | OB_WRP_Pages192to223 | OB_WRP_Pages224to255)))
+    {
+        EPRINTF("ERROR: Option bytes are in bad state.\r\n");
+        EPRINTF("OptionType:     0x%08x\r\n", ob.OptionType);
+        EPRINTF("WRPState:       0x%08x\r\n", ob.WRPState);
+        EPRINTF("WRPSector:      0x%08x%08x\r\n", ob.WRPSector2, ob.WRPSector);
+        EPRINTF("RDPLevel:       0x%02x\r\n", ob.RDPLevel);
+        EPRINTF("BORLevel:       0x%02x\r\n", ob.BORLevel);
+        EPRINTF("USERConfig:     0x%02x\r\n", ob.USERConfig);
+        EPRINTF("BOOTBit1Config: 0x%02x\r\n", ob.BOOTBit1Config);
+        retVal = DICE_FAILURE;
+        goto Cleanup;
+    }
+    else if(ob.RDPLevel == OB_RDP_LEVEL_0)
+    {
+        memset(&ob, 0x00, sizeof(ob));
+        ob.OptionType = OPTIONBYTE_WRP | OPTIONBYTE_RDP;
+        ob.WRPState = OB_WRPSTATE_ENABLE;
+        ob.WRPSector = OB_WRP_Pages0to31 | OB_WRP_Pages32to63 | OB_WRP_Pages64to95 | OB_WRP_Pages96to127 | OB_WRP_Pages128to159 | OB_WRP_Pages160to191 | OB_WRP_Pages192to223 | OB_WRP_Pages224to255;
+#ifndef IRREVERSIBLELOCKDOWN
+        ob.RDPLevel = OB_RDP_LEVEL_1;
+#else
+        ob.RDPLevel = OB_RDP_LEVEL_2;
+#endif
+
+        if((HAL_FLASH_OB_Unlock() != HAL_OK) ||
+           (HAL_FLASHEx_OBProgram(&ob) != HAL_OK) ||
+           (HAL_FLASH_OB_Lock() != HAL_OK))
+        {
+            EPRINTF("ERROR: Programming option bytes failed.\r\n");
+            retVal = DICE_FAILURE;
+            goto Cleanup;
+        }
+        memset(&ob, 0x00, sizeof(ob));
+        HAL_FLASHEx_OBGetConfig(&ob);
+        EPRINTF("INFO: Option bytes written. Power-cycle required to apply them!\r\n");
+        for(;;);
+    }
+    else if(ob.RDPLevel == OB_RDP_LEVEL_1)
+    {
+        EPRINTF("WARNING: Non-Permanent lockdown deteted (RDPLevel = OB_RDP_LEVEL_1).\r\n");
+    }
+    else if(ob.RDPLevel == OB_RDP_LEVEL_2)
+    {
+        EPRINTF("INFO: miniDICE is fully secured.\r\n");
+    }
+    else
+    {
+        EPRINTF("ERROR: RDPLevel = 0x%08x.\r\n", ob.RDPLevel);
+        retVal = DICE_FAILURE;
+        goto Cleanup;
+    }
+    
+Cleanup:
+    
+    return retVal;
+}
+
 DICE_STATUS DiceInitialize(void)
 {
     DICE_STATUS retVal = DICE_SUCCESS;

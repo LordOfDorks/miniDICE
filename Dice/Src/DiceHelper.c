@@ -5,8 +5,13 @@
 #include "DiceCore.h"
 
 extern RNG_HandleTypeDef hrng;
-
+const uint32_t diceReleaseDate = DICEDATE;
+const struct{
+    uint16_t major;
+    uint16_t minor;
+} diceReleaseVersion = {DICEMAJORVERSION, DICEMINORVERSION};
 volatile uint32_t touch;
+
 void DiceTouchData(void)
 {
     // Make sure this data does not get optimized out
@@ -36,6 +41,10 @@ void DiceGetRandom(uint8_t* entropyPtr, uint32_t entropySize)
 void DicePrintInfo(void)
 {
     uint8_t num[32];
+
+    EPRINTF("\r\n--DICE-Info------------------------------------------------------------------------------");
+    EPRINTF("\r\nReleaseDate:        %s", asctime(localtime((time_t*)&diceReleaseDate)));
+    EPRINTF("\rVersion:            %d.%d", diceReleaseVersion.major, diceReleaseVersion.minor);
     EPRINTF("\r\n--DICE-Certificate-START-----------------------------------------------------------------");
     EPRINTF("\r\nMagic:              %c%c%c%c", (DICEDATAPTR->s.cert.signData.deviceInfo.magic & 0x000000FF), ((DICEDATAPTR->s.cert.signData.deviceInfo.magic >> 8) & 0x000000FF), ((DICEDATAPTR->s.cert.signData.deviceInfo.magic >> 16) & 0x000000FF), ((DICEDATAPTR->s.cert.signData.deviceInfo.magic >> 24) & 0x000000FF));
     EPRINTF("\r\nProperties:         %s%s%s%s", (DICEDATAPTR->s.cert.signData.deviceInfo.properties.importedSeed) ? "importedSeed " : "", (DICEDATAPTR->s.cert.signData.deviceInfo.properties.noClear) ? "noClear " : "", (DICEDATAPTR->s.cert.signData.deviceInfo.properties.noBootNonce) ? "noBootNonce " : "", (DICEDATAPTR->s.cert.signData.deviceInfo.properties.inheritedAuthority) ? "inheritedAuthority " : "");

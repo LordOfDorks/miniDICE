@@ -141,6 +141,7 @@ int main(void)
     EPRINTF("\r\n\r\n++++++++++++++++\r\n");
     EPRINTF("--> miniDICE <--\r\n");
     EPRINTF("++++++++++++++++\r\n");
+    if(DiceLockDown() != DICE_SUCCESS) Error_Handler();
     if(((!DICEFUSEAREA->s.deviceInfo.properties.noClear) && (HAL_GPIO_ReadPin(FWBut_GPIO_Port, FWBut_Pin) != GPIO_PIN_RESET)) ||
        ((retVal = DiceInitialize()) == DICE_LOAD_MODULE_FAILED) ||
         (HAL_GPIO_ReadPin(FWBut_GPIO_Port, FWBut_Pin) != GPIO_PIN_RESET))
