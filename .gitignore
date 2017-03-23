@@ -13,8 +13,6 @@
 *.iobj
 *.lnp
 *.vcxproj.user
-*.epr
-*.epu
 *.dfu
 *.map
 *.htm
