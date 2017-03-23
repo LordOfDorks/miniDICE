@@ -48,7 +48,7 @@ void DicePrintInfo(void)
     EPRINTF("\r\n--DICE-Certificate-START-----------------------------------------------------------------");
     EPRINTF("\r\nMagic:              %c%c%c%c", (DICEDATAPTR->s.cert.signData.deviceInfo.magic & 0x000000FF), ((DICEDATAPTR->s.cert.signData.deviceInfo.magic >> 8) & 0x000000FF), ((DICEDATAPTR->s.cert.signData.deviceInfo.magic >> 16) & 0x000000FF), ((DICEDATAPTR->s.cert.signData.deviceInfo.magic >> 24) & 0x000000FF));
     EPRINTF("\r\nProperties:         %s%s%s%s", (DICEDATAPTR->s.cert.signData.deviceInfo.properties.importedSeed) ? "importedSeed " : "", (DICEDATAPTR->s.cert.signData.deviceInfo.properties.noClear) ? "noClear " : "", (DICEDATAPTR->s.cert.signData.deviceInfo.properties.noBootNonce) ? "noBootNonce " : "", (DICEDATAPTR->s.cert.signData.deviceInfo.properties.inheritedAuthority) ? "inheritedAuthority " : "");
-    EPRINTF("\r\nRollBackProtection: 0x%08x - %s", DICEDATAPTR->s.cert.signData.deviceInfo.rollBackProtection, asctime(localtime((time_t*)&DICEDATAPTR->s.cert.signData.deviceInfo.rollBackProtection)));
+    EPRINTF("\r\nRollBackProtection: %d", DICEDATAPTR->s.cert.signData.deviceInfo.rollBackProtection);
     EPRINTF("\rDevicePub.x:        0x");
     BigValToBigInt(num, &DICEDATAPTR->s.cert.signData.deviceInfo.devicePub.x);
     EPRINTFHEXSTRING(num, sizeof(num));
@@ -62,7 +62,7 @@ void DicePrintInfo(void)
     BigValToBigInt(num, &DICEDATAPTR->s.cert.signData.deviceInfo.authorityPub.y);
     EPRINTFHEXSTRING(num, sizeof(num));
     EPRINTF("\r\nCodeSize:           %d bytes (0x%08x)", DICEDATAPTR->s.cert.signData.codeSize, DICEDATAPTR->s.cert.signData.codeSize);
-    EPRINTF("\r\nCodeIssuanceDate:   0x%08x - %s", DICEDATAPTR->s.cert.signData.issueDate, asctime(localtime((time_t*)&DICEDATAPTR->s.cert.signData.issueDate)));
+    EPRINTF("\r\nCodeIssuanceDate:   %d - %s", DICEDATAPTR->s.cert.signData.issueDate, asctime(localtime((time_t*)&DICEDATAPTR->s.cert.signData.issueDate)));
     EPRINTF("\rCodeName:           0x");
     EPRINTFHEXSTRING(DICEDATAPTR->s.cert.signData.codeName, sizeof(DICEDATAPTR->s.cert.signData.codeName));
     if((DICEDATAPTR->s.codeSignaturePtr != NULL) && (!DiceNullCheck(DICEDATAPTR->s.codeSignaturePtr->signedData.alternateDigest, sizeof(DICEDATAPTR->s.codeSignaturePtr->signedData.alternateDigest))))

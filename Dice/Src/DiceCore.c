@@ -206,6 +206,7 @@ DICE_STATUS DiceInitialize(void)
             goto Cleanup;
         }
         DiceData.s.codeSignaturePtr->signedData.issueDate = DICEFUSEAREA->s.deviceInfo.rollBackProtection;
+        DiceData.s.codeSignaturePtr->signedData.issueDate = DiceData.s.cert.signData.deviceInfo.rollBackProtection;
         EPRINTF("INFO: Application update detected. Rollback protection adjusted.\r\n");
     }
     

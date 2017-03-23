@@ -13,6 +13,7 @@
 *.iobj
 *.lnp
 *.vcxproj.user
+*.VC.opendb
 *.dfu
 *.map
 *.htm

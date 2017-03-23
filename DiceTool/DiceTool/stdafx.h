@@ -9,6 +9,16 @@
 
 #include <stdio.h>
 #include <tchar.h>
+#include <string>
+#include <vector>
+#include <memory>
+#include <unordered_map>
+#include <Windows.h>
+#include <Wincrypt.h>
+#include "STDFUPRTINC.h"
+#include "STDFUFilesInc.h"
+#include "DiceCore.h"
+#include "DiceEcc.h"
 
 
 

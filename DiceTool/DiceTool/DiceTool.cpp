@@ -2,15 +2,6 @@
 //
 
 #include "stdafx.h"
-#include "Windows.h"
-#include <string>
-#include <vector>
-#include <memory>
-#include <unordered_map>
-#include "STDFUPRTINC.h"
-#include "STDFUFilesInc.h"
-#include "DiceCore.h"
-#include "DiceEcc.h"
 
 #define diceDeviceVid                         0x0483
 #define diceDevicePid                         0xDF11
@@ -312,10 +303,37 @@ void CreateDiceApplication(
         sigTrailer->signedData.codeSize = dfuImageElement.dwDataLength - sizeof(DiceEmbeddedSignature_t);
         sigTrailer->signedData.issueDate = (timeStamp != 0) ? timeStamp : GetTimeStamp();
         Dice_SHA256_Block(dfuImageElement.Data, sigTrailer->signedData.codeSize, sigTrailer->signedData.codeDigest);
+
+        std::wstring digestString(MAX_PATH, 0);
+        DWORD cchDigestString = digestString.size();
+        CryptBinaryToString(sigTrailer->signedData.codeDigest, sizeof(sigTrailer->signedData.codeDigest), CRYPT_STRING_HEXRAW, (LPWSTR)digestString.c_str(), &cchDigestString);
+        digestString.resize(cchDigestString - 2);
+        std::wstring versionString(MAX_PATH, 0);
+        wsprintf((WCHAR*)versionString.c_str(), L"-%d-", sigTrailer->signedData.issueDate);
+        versionString.resize(wcslen(versionString.c_str()));
+
         if (alternateDigest.size() == sizeof(sigTrailer->signedData.alternateDigest))
         {
             memcpy(sigTrailer->signedData.alternateDigest, alternateDigest.data(), sizeof(sigTrailer->signedData.alternateDigest));
         }
+        else
+        {
+            WIN32_FIND_DATA fileData = { 0 };
+            HANDLE search = INVALID_HANDLE_VALUE;
+            std::wstring searchMask(fileName);
+            searchMask.resize(searchMask.size() - 4);
+            searchMask.append(L"-*-*.DFU");
+            if ((search = FindFirstFile(searchMask.c_str(), &fileData)) != INVALID_HANDLE_VALUE)
+            {
+                while (FindNextFile(search, &fileData));
+                std::wstring lastDfuFile(fileData.cFileName);
+                lastDfuFile.resize(lastDfuFile.size() - 4);
+                lastDfuFile = lastDfuFile.substr(lastDfuFile.size() - 64, 64);
+                std::vector<BYTE> lastAlternateDigest = ReadHex(lastDfuFile);
+                memcpy(sigTrailer->signedData.alternateDigest, lastAlternateDigest.data(), sizeof(sigTrailer->signedData.alternateDigest));
+            }
+        }
+
         if ((retVal = Dice_DSASign((uint8_t*)&sigTrailer->signedData, sizeof(sigTrailer->signedData), authorityPrv, &sigTrailer->signature)) != DICE_SUCCESS)
         {
             throw retVal;
@@ -334,10 +352,18 @@ void CreateDiceApplication(
         {
             throw retVal;
         }
-        std::string dfuFileName;
-        dfuFileName = hexFileName.substr(0, hexFileName.size() - 4);
-        dfuFileName.append(".DFU");
-        if ((retVal = STDFUFILES_CreateNewDFUFile((PSTR)dfuFileName.c_str(), &hDfuFile, diceDeviceVid, diceDevicePid, diceDeviceVer)) != STDFUFILES_NOERROR)
+
+        std::wstring wDfuFileName(fileName);
+        wDfuFileName.resize(wDfuFileName.size() - 4);
+        wDfuFileName.append(versionString);
+        wDfuFileName.append(digestString);
+        wDfuFileName.append(L".DFU");
+        hexFileName.resize(wDfuFileName.size());
+        if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wDfuFileName.c_str(), wDfuFileName.size(), (LPSTR)hexFileName.c_str(), hexFileName.size(), NULL, NULL))
+        {
+            throw GetLastError();
+        }
+        if ((retVal = STDFUFILES_CreateNewDFUFile((PSTR)hexFileName.c_str(), &hDfuFile, diceDeviceVid, diceDevicePid, diceDeviceVer)) != STDFUFILES_NOERROR)
         {
             throw retVal;
         }

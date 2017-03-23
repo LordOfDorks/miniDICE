@@ -5,8 +5,8 @@
 #include "DiceStatus.h"
 
 #define DICEMAJORVERSION            (0x0001)
-#define DICEMINORVERSION            (0x0000)
-#define DICEDATE                    (0x58D2D91C)
+#define DICEMINORVERSION            (0x0001)
+#define DICEDATE                    (1490281840)
 #define DICEMAGIC                   (0x45434944) //'DICE'
 #define DICEPROVISIONEDID           (0x44494345) //'ECID'
 #define DICEMARKER                  (0x4B52414D45434944)
