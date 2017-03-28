@@ -17,14 +17,25 @@
 #define DICERAMSIZE                 (0x00000200)
 #define DICEWIPERAMSTART            (DICERAMSTART + DICERAMSIZE)
 #define DICEWIPERAMSIZE             (0x00005000 - DICERAMSIZE)
-#define DICEAPPLICATIONAREASTART    (0x08008000)
-#define DICEAPPLICATIONAREASIZE     (0x00028000)
+#define DICEAPPLICATIONOFFSET       (0x00005400)
+#define DICEAPPLICATIONAREASTART    (0x08000000 + DICEAPPLICATIONOFFSET)
+#define DICEAPPLICATIONAREASIZE     (0x00030000 - DICEAPPLICATIONOFFSET)
 #define DICECOMPOUNDDERIVATIONLABEL "DiceCompoundKey"
 #define DICEDATAPTR                 ((PDiceData_t)DICERAMSTART)
 
+#define DICEBLINKRESETME            (1)
+#define DICEBLINKDFU                (2)
+#define DICEBLINKERROR              (3)
+
+#ifndef SILENTDICE
 #define EPRINTF(...) fprintf(&__stderr, __VA_ARGS__)
 #define EPRINTFHEXSTRING(__p, __l) for(uint32_t n = 0; n < (__l); n++) EPRINTF("%02x", ((uint8_t*)(__p))[n]);
 #define EPRINTFBYTESTRING(__p, __l) for(uint32_t n = 0; n < (__l); n++) EPRINTF("%02x ", ((uint8_t*)(__p))[n]);
+#else
+#define EPRINTF(...)
+#define EPRINTFHEXSTRING(__p, __l)
+#define EPRINTFBYTESTRING(__p, __l)
+#endif
 
 typedef struct
 {
@@ -107,3 +118,4 @@ void DiceGetRandom(uint8_t* entropyPtr, uint32_t entropySize);
 void DicePrintInfo(void);
 void DicePrintInfoHex(char* varName, void* dataPtr, uint32_t dataSize);
 bool DiceVerifyDeviceCertificate(void);
+void DiceBlink(uint32_t info);

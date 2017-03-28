@@ -50,15 +50,15 @@
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
-CRYP_HandleTypeDef hcryp;
-
 RNG_HandleTypeDef hrng;
 
+#ifndef SILENTDICE
 UART_HandleTypeDef huart2;
+#endif
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-CRYP_HandleTypeDef hcryp = {0};
+#ifndef SILENTDICE
 #define DEFAULT_FILE_HANDLE_STDOUT (1)
 #define DEFAULT_FILE_HANDLE_STDIN (2)
 #define DEFAULT_FILE_HANDLE_STDERR (3)
@@ -66,16 +66,17 @@ struct __FILE { int handle; };
 FILE __stdout = {DEFAULT_FILE_HANDLE_STDOUT};
 FILE __stdin = {DEFAULT_FILE_HANDLE_STDIN};
 FILE __stderr = {DEFAULT_FILE_HANDLE_STDERR};
-CRYP_HandleTypeDef hcryp;
+#endif
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 void Error_Handler(void);
 static void MX_GPIO_Init(void);
+#ifndef SILENTDICE
 static void MX_USART2_UART_Init(void);
+#endif
 static void MX_RNG_Init(void);
-static void MX_AES_Init(void);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
@@ -83,6 +84,7 @@ static void MX_AES_Init(void);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
+#ifndef SILENTDICE
 int fputc(int ch, FILE *f)
 {
     if(f->handle == DEFAULT_FILE_HANDLE_STDOUT)
@@ -112,6 +114,7 @@ int fgetc(FILE *f)
   }
   return -1;
 }
+#endif
 
 /* USER CODE END 0 */
 
@@ -132,10 +135,11 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+#ifndef SILENTDICE
   MX_USART2_UART_Init();
+#endif
 //  MX_USB_DEVICE_Init();
   MX_RNG_Init();
-  MX_AES_Init();
 
   /* USER CODE BEGIN 2 */
     EPRINTF("\r\n\r\n++++++++++++++++\r\n");
@@ -150,10 +154,9 @@ int main(void)
         
         // The only way out of here is a reboot
         EPRINTF("INFO: Reboot to exit DFU mode.\r\n");
-        while(1)
+        for(;;)
         {
-            HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
-            HAL_Delay(250);
+            DiceBlink(DICEBLINKDFU);
         }
     }
     if(retVal != DICE_SUCCESS)
@@ -257,38 +260,6 @@ void SystemClock_Config(void)
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 }
 
-/* AES init function */
-static void MX_AES_Init(void)
-{
-
-   uint8_t pKey[16] ;
-
-  hcryp.Instance = AES;
-  hcryp.Init.DataType = CRYP_DATATYPE_32B;
-  pKey[0] = 0x00;
-  pKey[1] = 0x00;
-  pKey[2] = 0x00;
-  pKey[3] = 0x00;
-  pKey[4] = 0x00;
-  pKey[5] = 0x00;
-  pKey[6] = 0x00;
-  pKey[7] = 0x00;
-  pKey[8] = 0x00;
-  pKey[9] = 0x00;
-  pKey[10] = 0x00;
-  pKey[11] = 0x00;
-  pKey[12] = 0x00;
-  pKey[13] = 0x00;
-  pKey[14] = 0x00;
-  pKey[15] = 0x00;
-  hcryp.Init.pKey = &pKey[0];
-  if (HAL_CRYP_Init(&hcryp) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-}
-
 /* RNG init function */
 static void MX_RNG_Init(void)
 {
@@ -302,6 +273,7 @@ static void MX_RNG_Init(void)
 }
 
 /* USART2 init function */
+#ifndef SILENTDICE
 static void MX_USART2_UART_Init(void)
 {
 
@@ -321,6 +293,7 @@ static void MX_USART2_UART_Init(void)
   }
 
 }
+#endif
 
 /** Configure pins as 
         * Analog 
@@ -371,6 +344,7 @@ void Error_Handler(void)
   /* User can add his own implementation to report the HAL error return state */
   while(1) 
   {
+      DiceBlink(DICEBLINKERROR);
   }
   /* USER CODE END Error_Handler */ 
 }

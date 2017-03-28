@@ -50,7 +50,10 @@ DICE_STATUS DiceLockDown(void)
         memset(&ob, 0x00, sizeof(ob));
         HAL_FLASHEx_OBGetConfig(&ob);
         EPRINTF("INFO: Option bytes written. Power-cycle required to apply them!\r\n");
-        for(;;);
+        for(;;)
+        {
+            DiceBlink(DICEBLINKRESETME);
+        }
     }
     else if(ob.RDPLevel == OB_RDP_LEVEL_1)
     {

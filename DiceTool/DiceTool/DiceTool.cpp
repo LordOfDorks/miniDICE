@@ -294,11 +294,12 @@ void CreateDiceApplication(
         {
             throw retVal;
         }
-        image.resize(dfuImageElement.dwDataLength + sizeof(DiceEmbeddedSignature_t));
+        uint32_t alignmentSpacer = (dfuImageElement.dwDataLength % sizeof(UINT64));
+        image.resize(dfuImageElement.dwDataLength + alignmentSpacer + sizeof(DiceEmbeddedSignature_t));
         dfuImageElement.Data = image.data();
         memset(&dfuImageElement.Data[dfuImageElement.dwDataLength], 0x00, sizeof(DiceEmbeddedSignature_t));
-        sigTrailer = (PDiceEmbeddedSignature_t)&dfuImageElement.Data[dfuImageElement.dwDataLength];
-        dfuImageElement.dwDataLength += sizeof(DiceEmbeddedSignature_t);
+        sigTrailer = (PDiceEmbeddedSignature_t)&dfuImageElement.Data[dfuImageElement.dwDataLength + alignmentSpacer];
+        dfuImageElement.dwDataLength += alignmentSpacer + sizeof(DiceEmbeddedSignature_t);
         sigTrailer->startMarker = DICEMARKER;
         sigTrailer->signedData.codeSize = dfuImageElement.dwDataLength - sizeof(DiceEmbeddedSignature_t);
         sigTrailer->signedData.issueDate = (timeStamp != 0) ? timeStamp : GetTimeStamp();
@@ -339,6 +340,8 @@ void CreateDiceApplication(
             throw retVal;
         }
         sigTrailer->endMarker = DICEMARKER;
+        wprintf(L"CodeOffset:       0x%08x\n", dfuImageElement.dwAddress);
+        wprintf(L"SignatureOffset:  0x%08x\n", dfuImageElement.dwAddress + sigTrailer->signedData.codeSize);
         PrintAppInfo(sigTrailer);
         if ((retVal = STDFUFILES_SetImageElement(hDfu, 0, FALSE, dfuImageElement)) != STDFUFILES_NOERROR)
         {

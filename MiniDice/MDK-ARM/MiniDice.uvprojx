@@ -333,7 +333,7 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls>--C99</MiscControls>
-              <Define>USE_HAL_DRIVER,STM32L082xx</Define>
+              <Define>USE_HAL_DRIVER,STM32L082xx,SILENTDICE</Define>
               <Undefine></Undefine>
               <IncludePath>../Inc;../../Dice/Inc;../Drivers/STM32L0xx_HAL_Driver/Inc;../Drivers/STM32L0xx_HAL_Driver/Inc/Legacy;../Middlewares/ST/STM32_USB_Device_Library/Core/Inc;../Middlewares/ST/STM32_USB_Device_Library/Class/DFU/Inc;../Drivers/CMSIS/Device/ST/STM32L0xx/Include;../Drivers/CMSIS/Include</IncludePath>
             </VariousControls>
@@ -391,11 +391,6 @@
           <GroupName>Drivers/STM32L0xx_HAL_Driver</GroupName>
           <Files>
             <File>
-              <FileName>stm32l0xx_hal_i2c.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Drivers/STM32L0xx_HAL_Driver/Src/stm32l0xx_hal_i2c.c</FilePath>
-            </File>
-            <File>
               <FileName>stm32l0xx_hal_pwr_ex.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Drivers/STM32L0xx_HAL_Driver/Src/stm32l0xx_hal_pwr_ex.c</FilePath>
@@ -431,16 +426,6 @@
               <FilePath>../Drivers/STM32L0xx_HAL_Driver/Src/stm32l0xx_hal_rcc_ex.c</FilePath>
             </File>
             <File>
-              <FileName>stm32l0xx_hal_dma.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Drivers/STM32L0xx_HAL_Driver/Src/stm32l0xx_hal_dma.c</FilePath>
-            </File>
-            <File>
-              <FileName>stm32l0xx_hal_tim_ex.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Drivers/STM32L0xx_HAL_Driver/Src/stm32l0xx_hal_tim_ex.c</FilePath>
-            </File>
-            <File>
               <FileName>stm32l0xx_hal_rcc.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Drivers/STM32L0xx_HAL_Driver/Src/stm32l0xx_hal_rcc.c</FilePath>
@@ -449,11 +434,6 @@
               <FileName>stm32l0xx_hal_cortex.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Drivers/STM32L0xx_HAL_Driver/Src/stm32l0xx_hal_cortex.c</FilePath>
-            </File>
-            <File>
-              <FileName>stm32l0xx_hal_tim.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Drivers/STM32L0xx_HAL_Driver/Src/stm32l0xx_hal_tim.c</FilePath>
             </File>
             <File>
               <FileName>stm32l0xx_hal_i2c_ex.c</FileName>
@@ -494,16 +474,6 @@
               <FileName>stm32l0xx_hal_firewall.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Drivers\STM32L0xx_HAL_Driver\Src\stm32l0xx_hal_firewall.c</FilePath>
-            </File>
-            <File>
-              <FileName>stm32l0xx_hal_cryp.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Drivers\STM32L0xx_HAL_Driver\Src\stm32l0xx_hal_cryp.c</FilePath>
-            </File>
-            <File>
-              <FileName>stm32l0xx_hal_cryp_ex.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Drivers\STM32L0xx_HAL_Driver\Src\stm32l0xx_hal_cryp_ex.c</FilePath>
             </File>
           </Files>
         </Group>

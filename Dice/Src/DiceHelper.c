@@ -12,6 +12,22 @@ const struct{
 } diceReleaseVersion = {DICEMAJORVERSION, DICEMINORVERSION};
 volatile uint32_t touch;
 
+void DiceBlink(uint32_t info)
+{
+    HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
+    HAL_Delay(250);
+    HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
+    HAL_Delay(500);
+    for(uint32_t n = 0; n < info; n++)
+    {
+        HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);
+        HAL_Delay(1000);
+        HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
+        HAL_Delay(500);
+    }
+    HAL_Delay(1500);
+}
+
 void DiceTouchData(void)
 {
     // Make sure this data does not get optimized out
@@ -38,6 +54,7 @@ void DiceGetRandom(uint8_t* entropyPtr, uint32_t entropySize)
     }
 }
 
+#ifndef SILENTDICE
 void DicePrintInfo(void)
 {
     uint8_t num[32];
@@ -121,6 +138,14 @@ void DicePrintInfoHex(char* varName, void* dataPtr, uint32_t dataSize)
     }
     EPRINTF("\r\n};\r\n\r\n");
 }
+#else
+void DicePrintInfo(void)
+{
+}
+void DicePrintInfoHex(char* varName, void* dataPtr, uint32_t dataSize)
+{
+}
+#endif
 
 bool DiceVerifyDeviceCertificate(void)
 {
