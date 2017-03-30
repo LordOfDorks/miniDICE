@@ -135,11 +135,13 @@ int main(void)
 
   /* USER CODE BEGIN 2 */
     EPRINTF("==========================\r\n");
-    EPRINTF("    DICE APP: Payload!  \r\n");
+    EPRINTF("    DICE APP: Payload!\r\n");
     EPRINTF("==========================\r\n");
     DiceTouchData();
-    DicePrintInfo();
-    if(DiceVerifyDeviceCertificate()) EPRINTF("INFO: Dice device certificate is valid!\r\n");
+
+    DicePrintInfoHex("DiceCertificate", &DICEDATAPTR->s.cert, sizeof(DICEDATAPTR->s.cert));
+    EPRINTF("INFO: DICE Device Certificate verification = %s!\r\n\r\n", DiceVerifyDeviceCertificate() ? "VALID!" : "INVALID!");
+
     MX_USB_DEVICE_Init();
   /* USER CODE END 2 */
 

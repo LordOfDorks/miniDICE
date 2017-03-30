@@ -129,14 +129,14 @@ void DicePrintInfo(void)
 void DicePrintInfoHex(char* varName, void* dataPtr, uint32_t dataSize)
 {
     EPRINTF("uint8_t %s[%d] = {", varName, dataSize);
-    for(uint32_t n = 0; n < sizeof(DiceData_t); n++)
+    for(uint32_t n = 0; n < dataSize; n++)
     {
         if((n < dataSize) && (n != 0)) EPRINTF(",");
         if((n % 0x10) != 0) EPRINTF(" ");
         else EPRINTF("\r\n");
         EPRINTF("0x%02x", ((uint8_t*)dataPtr)[n]);
     }
-    EPRINTF("\r\n};\r\n\r\n");
+    EPRINTF("\r\n};\r\n");
 }
 #else
 void DicePrintInfo(void)

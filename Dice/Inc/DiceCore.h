@@ -5,7 +5,7 @@
 #include "DiceStatus.h"
 
 #define DICEMAJORVERSION            (0x0001)
-#define DICEMINORVERSION            (0x0001)
+#define DICEMINORVERSION            (0x0002)
 #define DICEDATE                    (1490281840)
 #define DICEMAGIC                   (0x45434944) //'DICE'
 #define DICEPROVISIONEDID           (0x44494345) //'ECID'
@@ -17,15 +17,20 @@
 #define DICERAMSIZE                 (0x00000200)
 #define DICEWIPERAMSTART            (DICERAMSTART + DICERAMSIZE)
 #define DICEWIPERAMSIZE             (0x00005000 - DICERAMSIZE)
+#ifndef SILENTDICE
+#define DICEAPPLICATIONOFFSET       (0x00008000)
+#else
 #define DICEAPPLICATIONOFFSET       (0x00005400)
+#endif
 #define DICEAPPLICATIONAREASTART    (0x08000000 + DICEAPPLICATIONOFFSET)
 #define DICEAPPLICATIONAREASIZE     (0x00030000 - DICEAPPLICATIONOFFSET)
 #define DICECOMPOUNDDERIVATIONLABEL "DiceCompoundKey"
 #define DICEDATAPTR                 ((PDiceData_t)DICERAMSTART)
 
-#define DICEBLINKRESETME            (1)
-#define DICEBLINKDFU                (2)
-#define DICEBLINKERROR              (3)
+#define DICEBLINKERROR              (1)
+#define DICEBLINKRESETME            (2)
+#define DICEBLINKDFU                (3)
+#define DICEBLINKEARLYDFU           (4)
 
 #ifndef SILENTDICE
 #define EPRINTF(...) fprintf(&__stderr, __VA_ARGS__)

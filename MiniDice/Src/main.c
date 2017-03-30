@@ -153,17 +153,21 @@ int main(void)
         MX_USB_DEVICE_Init();
         
         // The only way out of here is a reboot
-        EPRINTF("INFO: Reboot to exit DFU mode.\r\n");
-        for(;;)
+        if(!__HAL_FIREWALL_IS_ENABLED())
         {
-            DiceBlink(DICEBLINKDFU);
+            EPRINTF("INFO: Reboot to exit DFU mode. Policy updates permitted.\r\n");
+            for(;;) DiceBlink(DICEBLINKEARLYDFU);
+        }
+        else
+        {
+            EPRINTF("INFO: Reboot to exit DFU mode.\r\n");
+            for(;;) DiceBlink(DICEBLINKDFU);
         }
     }
     if(retVal != DICE_SUCCESS)
     {
         Error_Handler();
     }
-    DicePrintInfoHex("DiceData", DICEDATAPTR, sizeof(DiceData_t));
 
     // The point of no return: Launch the application
     EPRINTF("INFO: Preparing payload APP launch...\r\n\r\n");
