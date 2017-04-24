@@ -310,7 +310,7 @@
           </ArmAdsMisc>
           <Cads>
             <interw>1</interw>
-            <Optim>4</Optim>
+            <Optim>1</Optim>
             <oTime>0</oTime>
             <SplitLS>0</SplitLS>
             <OneElfS>1</OneElfS>
@@ -333,7 +333,7 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls>--C99</MiscControls>
-              <Define>USE_HAL_DRIVER,STM32L082xx,SILENTDICE</Define>
+              <Define>USE_HAL_DRIVER,STM32L082xx,TOUCHOPTIONBYTES</Define>
               <Undefine></Undefine>
               <IncludePath>../Inc;../../Dice/Inc;../Drivers/STM32L0xx_HAL_Driver/Inc;../Drivers/STM32L0xx_HAL_Driver/Inc/Legacy;../Middlewares/ST/STM32_USB_Device_Library/Core/Inc;../Middlewares/ST/STM32_USB_Device_Library/Class/DFU/Inc;../Drivers/CMSIS/Device/ST/STM32L0xx/Include;../Drivers/CMSIS/Include</IncludePath>
             </VariousControls>
@@ -475,6 +475,11 @@
               <FileType>1</FileType>
               <FilePath>..\Drivers\STM32L0xx_HAL_Driver\Src\stm32l0xx_hal_firewall.c</FilePath>
             </File>
+            <File>
+              <FileName>stm32l0xx_hal_dma.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Drivers\STM32L0xx_HAL_Driver\Src\stm32l0xx_hal_dma.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -561,11 +566,6 @@
               <FilePath>..\..\Dice\Src\DiceCore.c</FilePath>
             </File>
             <File>
-              <FileName>DiceData.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\Dice\Src\DiceData.c</FilePath>
-            </File>
-            <File>
               <FileName>DiceEcc.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\Dice\Src\DiceEcc.c</FilePath>
@@ -589,6 +589,21 @@
               <FileName>DiceHelper.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\Dice\Src\DiceHelper.c</FilePath>
+            </File>
+            <File>
+              <FileName>DiceDerEnc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Dice\Src\DiceDerEnc.c</FilePath>
+            </File>
+            <File>
+              <FileName>DiceX509Bldr.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Dice\Src\DiceX509Bldr.c</FilePath>
+            </File>
+            <File>
+              <FileName>DiceBase64.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Dice\Src\DiceBase64.c</FilePath>
             </File>
           </Files>
         </Group>

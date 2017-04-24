@@ -145,11 +145,29 @@ int main(void)
     EPRINTF("\r\n\r\n++++++++++++++++\r\n");
     EPRINTF("--> miniDICE <--\r\n");
     EPRINTF("++++++++++++++++\r\n");
-    if(DiceLockDown() != DICE_SUCCESS) Error_Handler();
-    if(((!DICEFUSEAREA->s.deviceInfo.properties.noClear) && (HAL_GPIO_ReadPin(FWBut_GPIO_Port, FWBut_Pin) != GPIO_PIN_RESET)) ||
-       ((retVal = DiceInitialize()) == DICE_LOAD_MODULE_FAILED) ||
-        (HAL_GPIO_ReadPin(FWBut_GPIO_Port, FWBut_Pin) != GPIO_PIN_RESET))
+
+    GPIO_PinState fwButPressed = HAL_GPIO_ReadPin(FWBut_GPIO_Port, FWBut_Pin);
+    if(fwButPressed == GPIO_PIN_SET) EPRINTF("INFO: DFU loader requested.\r\n");
+
+    if(DiceLockDown() != DICE_SUCCESS)
     {
+        Error_Handler();
+    }
+
+    if(((retVal = DiceInitialize()) != DICE_SUCCESS) && (retVal != DICE_LOAD_MODULE_FAILED))
+    {
+        Error_Handler();
+    }
+
+    if((retVal == DICE_LOAD_MODULE_FAILED) ||
+       (fwButPressed == GPIO_PIN_SET))
+    {
+        if((DICEFUSEAREA->info.properties.noClear) && ((retVal = DiceSecure()) != DICE_SUCCESS))
+        {
+            Error_Handler();
+        }
+        DiceGenerateDFUString();
+
         MX_USB_DEVICE_Init();
         
         // The only way out of here is a reboot
@@ -164,7 +182,9 @@ int main(void)
             for(;;) DiceBlink(DICEBLINKDFU);
         }
     }
-    if(retVal != DICE_SUCCESS)
+    
+    // No way past this point without security
+    if((retVal = DiceSecure()) != DICE_SUCCESS)
     {
         Error_Handler();
     }
@@ -176,13 +196,13 @@ int main(void)
     // Release the HAL
     HAL_DeInit();
     // Redirect the vector table to the application vector table
-    SCB->VTOR = DICEAPPLICATIONAREASTART;
+    SCB->VTOR = DICEAPPENTRY;
     // Wipe all accessible RAM to make sure we didn't leave anything behind
-    for(uint32_t n = 0; n < DICEWIPERAMSIZE; n++) ((uint8_t*)DICEWIPERAMSTART)[n] = 0x00;
+    for(uint32_t n = DICEWIPERAMSTARTOFFSET; n < DICERAMSIZE; n++) ((uint8_t*)DICERAMSTART)[n] = 0x00;
     // Set the stackpointer to where the application expects it
-    __set_MSP(*((uint32_t*)DICEAPPLICATIONAREASTART));
+    __set_MSP(*((uint32_t*)DICEAPPENTRY));
     // Jump into the abyss
-    ((void (*)(void)) *((uint32_t*)(DICEAPPLICATIONAREASTART + sizeof(uint32_t))))();
+    ((void (*)(void)) *((uint32_t*)(DICEAPPENTRY + sizeof(uint32_t))))();
     // We will never return from this call!!
 
   /* USER CODE END 2 */

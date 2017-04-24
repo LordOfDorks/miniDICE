@@ -17,6 +17,8 @@
 #include <String.h>
 #ifndef WIN32
 #include "stm32l0xx_hal.h"
+#else
+#include <stdbool.h>
 #endif
 #include "DiceTarget.h"
 #include "DiceStatus.h"
@@ -1625,7 +1627,7 @@ BigIntToBigVal(bigval_t *tgt, void const *in, size_t inSize)
 // @param out  pointer to the big endian value to be produced
 // @param in   pointer to the bigval_t to convert
 //
-void
+int
 BigValToBigInt(void *out, const bigval_t *src)
 {
     int i;
@@ -1640,8 +1642,8 @@ BigValToBigInt(void *out, const bigval_t *src)
 #ifndef WIN32
 #pragma pop
 #endif
-	
     }
+    return ((BIGLEN - 1) * 4);
 }
 
 #ifdef ECC_TEST
@@ -1674,14 +1676,13 @@ ECC_feature_list(void)
 
 #if USES_EPHEMERAL
 #include <stdlib.h>
-#include <time.h>
 static int
 get_random_bytes(uint8_t *buf, size_t len)
 {
     // DJM: DICE (time->SOMETHING ELSE (TODO)
     // srand((unsigned)time(NULL));
 #ifdef WIN32
-    srand(time(NULL));
+//    srand(GetTickCount());
     for (; len; len--)
     { *buf++ = (uint8_t)rand(); }
     return 0;

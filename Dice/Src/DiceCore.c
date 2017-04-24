@@ -2,10 +2,11 @@
 #include <time.h>
 #include "main.h"
 #include "stm32l0xx_hal.h"
+#include "usbd_dfu_if.h"
 #include "DiceCore.h"
 
-//PDiceFuse_t pDiceEEProm = (PDiceFuse_t)DICEDATAEEPROMSTART;
 FIREWALL_InitTypeDef fw_init = {0};
+volatile uint8_t manualReprovision = 0;
 
 DICE_STATUS DiceLockDown(void)
 {
@@ -13,32 +14,34 @@ DICE_STATUS DiceLockDown(void)
     FLASH_OBProgramInitTypeDef ob = {0};
     HAL_FLASHEx_OBGetConfig(&ob);
 
-    if((ob.RDPLevel != OB_RDP_LEVEL_0) &&
-       (ob.WRPSector != (OB_WRP_Pages0to31 | OB_WRP_Pages32to63 | OB_WRP_Pages64to95 | OB_WRP_Pages96to127 | OB_WRP_Pages128to159 | OB_WRP_Pages160to191 | OB_WRP_Pages192to223 | OB_WRP_Pages224to255)))
-    {
-        EPRINTF("ERROR: Option bytes are in bad state.\r\n");
-        EPRINTF("OptionType:     0x%08x\r\n", ob.OptionType);
-        EPRINTF("WRPState:       0x%08x\r\n", ob.WRPState);
-        EPRINTF("WRPSector:      0x%08x%08x\r\n", ob.WRPSector2, ob.WRPSector);
-        EPRINTF("RDPLevel:       0x%02x\r\n", ob.RDPLevel);
-        EPRINTF("BORLevel:       0x%02x\r\n", ob.BORLevel);
-        EPRINTF("USERConfig:     0x%02x\r\n", ob.USERConfig);
-        EPRINTF("BOOTBit1Config: 0x%02x\r\n", ob.BOOTBit1Config);
-        retVal = DICE_FAILURE;
-        goto Cleanup;
-    }
-    else if(ob.RDPLevel == OB_RDP_LEVEL_0)
+//    EPRINTF("OptionType:     0x%08x\r\n", ob.OptionType);
+//    EPRINTF("WRPState:       0x%08x\r\n", ob.WRPState);
+//    EPRINTF("WRPSector:      0x%08x%08x\r\n", ob.WRPSector2, ob.WRPSector);
+//    EPRINTF("RDPLevel:       0x%02x\r\n", ob.RDPLevel);
+//    EPRINTF("BORLevel:       0x%02x\r\n", ob.BORLevel);
+//    EPRINTF("USERConfig:     0x%02x\r\n", ob.USERConfig);
+//    EPRINTF("BOOTBit1Config: 0x%02x\r\n", ob.BOOTBit1Config);
+
+    if(ob.RDPLevel == OB_RDP_LEVEL_0)
     {
         memset(&ob, 0x00, sizeof(ob));
         ob.OptionType = OPTIONBYTE_WRP | OPTIONBYTE_RDP;
         ob.WRPState = OB_WRPSTATE_ENABLE;
-        ob.WRPSector = OB_WRP_Pages0to31 | OB_WRP_Pages32to63 | OB_WRP_Pages64to95 | OB_WRP_Pages96to127 | OB_WRP_Pages128to159 | OB_WRP_Pages160to191 | OB_WRP_Pages192to223 | OB_WRP_Pages224to255;
+        uint64_t pageMask = 0x0000000000000000;
+        for(uint32_t n = 0; n < (DICEBOOTLOADERSIZE / 4096); n++)
+        {
+            pageMask |= (0x0000000000000001 << n);
+        }
+        ob.WRPSector = (uint32_t)(pageMask & 0x00000000ffffffff);
+        ob.WRPSector2 = (uint32_t)((pageMask >> 32) & 0x00000000ffffffff);
+//        ob.WRPSector = OB_WRP_Pages0to31 | OB_WRP_Pages32to63 | OB_WRP_Pages64to95 | OB_WRP_Pages96to127 | OB_WRP_Pages128to159 | OB_WRP_Pages160to191 | OB_WRP_Pages192to223 | OB_WRP_Pages224to255;
 #ifndef IRREVERSIBLELOCKDOWN
         ob.RDPLevel = OB_RDP_LEVEL_1;
 #else
         ob.RDPLevel = OB_RDP_LEVEL_2;
 #endif
 
+#ifdef TOUCHOPTIONBYTES
         if((HAL_FLASH_OB_Unlock() != HAL_OK) ||
            (HAL_FLASHEx_OBProgram(&ob) != HAL_OK) ||
            (HAL_FLASH_OB_Lock() != HAL_OK))
@@ -54,6 +57,9 @@ DICE_STATUS DiceLockDown(void)
         {
             DiceBlink(DICEBLINKRESETME);
         }
+#else
+        EPRINTF("WARNING: Write access to option bytes disabled!\r\n");
+#endif
     }
     else if(ob.RDPLevel == OB_RDP_LEVEL_1)
     {
@@ -75,12 +81,69 @@ Cleanup:
     return retVal;
 }
 
+char dfuStr[0x100] = {0};
+void DiceGenerateDFUString(void)
+{
+    uint32_t cursor = sprintf(dfuStr, "@miniDICE ");
+    
+    for(uint32_t n = DICEBOOTLOADERSIZE; n < DICEFLASHSIZE; n += MIN(99 * 512, DICEFLASHSIZE - n))
+    {
+        cursor += sprintf(&dfuStr[cursor],
+                "/0x%08x/%02d*512Bf",
+                (DICEFLASHSTART + n),
+                MIN(99, (DICEFLASHSIZE - n) / 512));
+    }
+
+    if((!DICERAMAREA->info.properties.noClear) && (!__HAL_FIREWALL_IS_ENABLED()))
+    {
+        uint32_t readWriteStart = (uint32_t)&DICEFUSEAREA->info;
+        uint32_t readWritePages = (DICEFUSEAREA->info.size + 63) / 64;
+        uint32_t writeStart = readWriteStart + readWritePages * 64;
+        uint32_t writePages = (DICEDATAEEPROMSTART + DICEDATAEEPROMSIZE - writeStart) /64;
+        cursor += sprintf(&dfuStr[cursor],
+                "/0x%08x/%02d*064Bg/0x%08x/%02d*064Bf",
+                readWriteStart,
+                readWritePages,
+                writeStart,
+                writePages);
+    }
+    else
+    {
+        cursor += sprintf(&dfuStr[cursor],
+                "/0x%08x/%02d*064Ba",
+                (uint32_t)&DICERAMAREA->info,
+                ((sizeof(DicePublicInfo_t) - 1 + DICERAMAREA->info.certBagLen + 63) / 64));
+    }
+    USBD_DFU_fops_FS.pStrDesc = (uint8_t*)dfuStr;
+}
+
+static DICE_STATUS DiceWriteDataEEProm(uint32_t* destination, uint32_t* dataWords, uint32_t numDataWords)
+{
+    if(HAL_FLASH_Unlock() != HAL_OK) return DICE_FAILURE;
+    for(uint32_t n = 0; n < numDataWords; n++)
+    {
+        if(n > 0) HAL_Delay(1); // Fast bulk erase has shown errors
+        if(destination[n] != dataWords[n])
+        {
+            if(destination[n] != 0)
+            {
+                if(HAL_FLASHEx_DATAEEPROM_Erase((uint32_t)(&destination[n])) != HAL_OK) return DICE_FAILURE;
+            }
+            if(dataWords[n] != 0)
+            {
+                if(HAL_FLASHEx_DATAEEPROM_Program(FLASH_TYPEPROGRAM_WORD, (uint32_t)(&destination[n]), dataWords[n]) != HAL_OK) return DICE_FAILURE;
+            }
+        }
+    }
+    if(HAL_FLASH_Lock() != HAL_OK) return DICE_FAILURE;
+
+    return DICE_SUCCESS;
+}
+
 DICE_STATUS DiceInitialize(void)
 {
     DICE_STATUS retVal = DICE_SUCCESS;
     bigval_t seed = {0};
-
-    DiceTouchData();
 
     if(__HAL_FIREWALL_IS_ENABLED())
     {
@@ -88,184 +151,216 @@ DICE_STATUS DiceInitialize(void)
         retVal = DICE_FAILURE;
         goto Cleanup;
     }
-    
-    touch = 0;
-    if(touch != 0)
+
+    // Initial Device Identity Provisioning
+    if((manualReprovision) || (DICEFUSEAREA->magic != DICEMAGIC))
     {
-        HAL_FLASH_Unlock();
-        for(uint32_t n = 0; n < sizeof(DiceFuse_t) / sizeof(uint32_t); n++) HAL_FLASHEx_DATAEEPROM_Erase((uint32_t)(&DICEFUSEAREA->raw32[n]));
-        HAL_FLASH_Lock();
-    }
-
-    if(DICEFUSEAREA->s.deviceInfo.magic != DICEMAGIC)
-    {
-        DiceFuse_t staging = {0};
-        if(DICEFUSEAREA->s.deviceInfo.magic == DICEPROVISIONEDID)
+        // Initilaize the staging area
+        uint32_t* stagingBuffer = (uint32_t*)malloc(DICEFUSEDATASIZE);
+        if(stagingBuffer == NULL)
         {
-            memcpy(&staging, DICEFUSEAREA, sizeof(staging));
-        }
-        else
-        {
-            staging.s.deviceInfo.properties.importedSeed = 0;
-            staging.s.deviceInfo.properties.noClear = 0;
-            staging.s.deviceInfo.properties.noBootNonce = 0;
-
-            // If there is alreay an authority key here - we keep that
-            if(!DiceNullCheck(&(DICEFUSEAREA->s.deviceInfo.authorityPub), sizeof(DICEFUSEAREA->s.deviceInfo.authorityPub)))
-            {
-                staging.s.deviceInfo.properties.inheritedAuthority = 1;
-                memcpy(&staging.s.deviceInfo.authorityPub, &DICEFUSEAREA->s.deviceInfo.authorityPub, sizeof(staging.s.deviceInfo.authorityPub));
-            }
-        }
-        staging.s.deviceInfo.magic = DICEMAGIC;
-        Dice_GenerateDSAKeyPair(&staging.s.deviceInfo.devicePub, &staging.s.devicePrv);
-
-        // Write the data to the EEPROM
-        if(HAL_FLASH_Unlock() != HAL_OK)
-        {
-            EPRINTF("ERROR: HAL_FLASH_Unlock() failed!\r\n");
+            EPRINTF("ERROR: No Memory!\r\n");
             retVal = DICE_FAILURE;
             goto Cleanup;
         }
-        for(uint32_t n = 0; n < (sizeof(staging.raw32) / sizeof(uint32_t)); n++)
+        PDicePersistedData_t staging = (PDicePersistedData_t)stagingBuffer;
+        staging->magic = DICEMAGIC;
+        staging->info.magic = DICEMAGIC;
+        staging->info.rollBackProtection = 0;
+        staging->info.properties.noClear = 0;
+        staging->info.bootCounter = 0;
+        staging->info.certBagLen = DICEFUSEDATASIZE - sizeof(DicePersistedData_t) + 1;
+        Dice_GenerateDSAKeyPair(&staging->info.devicePub, &staging->devicePrv);
+
+        // Generate a selfsigned device cert
+        DICE_X509_TBS_DATA x509DeviceCertData = {{{0},
+                                                  "DICECore", "MSFT", "US",
+                                                  &staging->info.devicePub, &staging->devicePrv
+                                                 },
+                                                 1483228800, 2145830400,
+                                                 {{0},
+                                                  "DICECore", "MSFT", "US",
+                                                  &staging->info.devicePub, &staging->devicePrv
+                                                 }};
+        Dice_KDF_SHA256_Seed(x509DeviceCertData.Issuer.CertSerialNum,
+                             sizeof(x509DeviceCertData.Issuer.CertSerialNum),
+                             (const uint8_t*)&staging->info.devicePub,
+                             sizeof(staging->info.devicePub),
+                             NULL,
+                             (const uint8_t*)x509DeviceCertData.Issuer.CommonName,
+                             strlen(x509DeviceCertData.Issuer.CommonName));
+        x509DeviceCertData.Issuer.CertSerialNum[0] &= 0x7F; // Make sure the serial number is always positive
+        memcpy(x509DeviceCertData.Subject.CertSerialNum, x509DeviceCertData.Issuer.CertSerialNum, sizeof(x509DeviceCertData.Subject.CertSerialNum));
+
+        uint8_t* cerBuffer = (uint8_t*)malloc(DER_MAX_TBS);
+        if(cerBuffer == NULL)
         {
-            if(DICEFUSEAREA->raw32[n] != staging.raw32[n])
-            {
-                if(DICEFUSEAREA->raw32[n] != 0)
-                {
-                    while(HAL_FLASHEx_DATAEEPROM_Erase((uint32_t)(&DICEFUSEAREA->raw32[n])) != HAL_OK);
-                }
-                if(staging.raw32[n])
-                {
-                    while(HAL_FLASHEx_DATAEEPROM_Program(FLASH_TYPEPROGRAM_WORD, (uint32_t)(&DICEFUSEAREA->raw32[n]), staging.raw32[n]) != HAL_OK);
-                }
-            }
+            EPRINTF("ERROR: No Memory!\r\n");
+            retVal = DICE_FAILURE;
+            goto Cleanup;
         }
-        if(HAL_FLASH_Lock() != HAL_OK)
+        DERBuilderContext cerCtx = {0};
+        DERInitContext(&cerCtx, cerBuffer, DER_MAX_TBS);
+        X509MakeCertBody(&cerCtx, &x509DeviceCertData);
+        X509MakeDeviceCert(&cerCtx, DICEVERSION, DICETIMESTAMP, *((uint32_t*)&staging->info.properties), NULL);
+        X509CompleteCert(&cerCtx, &x509DeviceCertData);
+        staging->info.certBagLen = DERtoPEM(&cerCtx, 0, staging->info.certBag, staging->info.certBagLen);
+        
+        staging->info.size = sizeof(DicePublicInfo_t) - 1 + staging->info.certBagLen;
+        staging->info.dontTouchSize = (((sizeof(DicePersistedData_t) - 1 + staging->info.certBagLen + 0xFF) / 0x100) * 0x100);
+
+        // Write the staging area to the data EEPROM
+        if((retVal = DiceWriteDataEEProm((uint32_t*)DICEDATAEEPROMSTART, stagingBuffer, (staging->info.dontTouchSize / sizeof(uint32_t)))) != DICE_SUCCESS)
         {
-            EPRINTF("ERROR: HAL_FLASH_Lock() failed!\r\n");
+            goto Cleanup;
+        }
+        free(cerBuffer);
+        free(stagingBuffer);
+    }
+
+    // Increment the BootCounter
+    {
+        uint32_t BootCtr = DICEFUSEAREA->info.bootCounter + 1;
+        if((retVal = DiceWriteDataEEProm(&DICEFUSEAREA->info.bootCounter, &BootCtr, 1)) != DICE_SUCCESS)
+        {
+            EPRINTF("ERROR: BootCounter update failed!\r\n");
             retVal = DICE_FAILURE;
             goto Cleanup;
         }
     }
 
-    // Put the diceData together
-    memset(DiceData.raw8, 0x00, sizeof(DiceData.raw8));
     // Copy the device information over
-    memcpy(&DiceData.s.cert.signData.deviceInfo, &DICEFUSEAREA->s.deviceInfo, sizeof(DiceData.s.cert.signData.deviceInfo));
-    
-    // Get some salt for the cert
-    if(!DiceData.s.cert.signData.deviceInfo.properties.noBootNonce)
-    {
-        DiceGetRandom(DiceData.s.cert.signData.bootNonce, sizeof(DiceData.s.cert.signData.bootNonce));
-    }
+    DICERAMAREA->magic = DICEMAGIC;
+    memset(&DICERAMAREA->compoundPrv, 0x00, sizeof(DICERAMAREA->compoundPrv));
+    memset(&DICERAMAREA->alternatePrv, 0x00, sizeof(DICERAMAREA->alternatePrv));
+    memset(&DICERAMAREA->compoundPub, 0x00, sizeof(DICERAMAREA->compoundPub));
+    memset(&DICERAMAREA->alternatePub, 0x00, sizeof(DICERAMAREA->alternatePub));
+    memcpy(&DICERAMAREA->info, &DICEFUSEAREA->info, sizeof(DICEFUSEAREA->info) + DICEFUSEAREA->info.certBagLen - 1);
 
     // No code - no boot
-    if(DiceNullCheck((uint8_t*)DICEAPPLICATIONAREASTART, 1024))
+    if(DICEAPPHDR->s.sign.magic != DICEMAGIC)
     {
         EPRINTF("WARNING: The application area is NULL, we go direcrtly to DFU mode!\r\n");
         retVal = DICE_LOAD_MODULE_FAILED;
         goto Cleanup;
     }
 
-    // Find the embedded signature block
-    for(uint32_t n = 0; n < (DICEAPPLICATIONAREASIZE - sizeof(DiceEmbeddedSignature_t)); n += sizeof(uint64_t))
+    // Verify the App digest To this point it is still an App integrity check
+    uint8_t referenceDigest[SHA256_DIGEST_LENGTH];
+    Dice_SHA256_Block((uint8_t*)DICEAPPENTRY, DICEAPPHDR->s.sign.codeSize, referenceDigest);
+    if(memcmp(DICEAPPHDR->s.sign.appDigest, referenceDigest, SHA256_DIGEST_LENGTH))
     {
-        PDiceEmbeddedSignature_t signatureBlock = (PDiceEmbeddedSignature_t)&(((uint8_t*)DICEAPPLICATIONAREASTART)[n]);
-        if((signatureBlock->startMarker == DICEMARKER) && (signatureBlock->endMarker == DICEMARKER))
-        {
-            DiceData.s.codeSignaturePtr = signatureBlock;
-            DiceData.s.cert.signData.codeSize = signatureBlock->signedData.codeSize;
-            DiceData.s.cert.signData.issueDate = signatureBlock->signedData.issueDate;
-            break;
-        }
-    }
-    if(DiceData.s.codeSignaturePtr == NULL)
-    {
-        EPRINTF("WARNING: No embedded signature trailer was found, we go direcrtly to DFU mode!\r\n");
-        retVal = DICE_LOAD_MODULE_FAILED;
-        goto Cleanup;
-    }
-    if(DiceData.s.codeSignaturePtr->signedData.issueDate < DICEFUSEAREA->s.deviceInfo.rollBackProtection)
-    {
-        EPRINTF("RollBackProtection: %s\r", asctime(localtime((time_t*)&DICEFUSEAREA->s.deviceInfo.rollBackProtection)));
-        EPRINTF("CodeIssuanceDate:   %s\r", asctime(localtime((time_t*)&DiceData.s.codeSignaturePtr->signedData.issueDate)));
-        EPRINTF("WARNING: Application rollback was detected, we go direcrtly to DFU mode!\r\n");
-        retVal = DICE_LOAD_MODULE_FAILED;
-        goto Cleanup;
-    }
-    
-    // If the current application is newer than the previous one, crank the monotonic counter forward
-    if((!DiceNullCheck(&DiceData.s.cert.signData.deviceInfo.authorityPub, sizeof(ecc_publickey))) &&
-       (DiceData.s.codeSignaturePtr->signedData.issueDate > DICEFUSEAREA->s.deviceInfo.rollBackProtection))
-    {
-        if((HAL_FLASH_Unlock() != HAL_OK) ||
-           (HAL_FLASHEx_DATAEEPROM_Erase((uint32_t)(&DICEFUSEAREA->s.deviceInfo.rollBackProtection)) != HAL_OK) ||
-           (HAL_FLASHEx_DATAEEPROM_Program(FLASH_TYPEPROGRAM_WORD, (uint32_t)(&DICEFUSEAREA->s.deviceInfo.rollBackProtection), DiceData.s.codeSignaturePtr->signedData.issueDate)) ||
-           (HAL_FLASH_Lock() != HAL_OK))
-        {
-            retVal = DICE_FAILURE;
-            EPRINTF("ERROR: Compound key derivation failed!\r\n");
-            goto Cleanup;
-        }
-        DiceData.s.codeSignaturePtr->signedData.issueDate = DICEFUSEAREA->s.deviceInfo.rollBackProtection;
-        DiceData.s.codeSignaturePtr->signedData.issueDate = DiceData.s.cert.signData.deviceInfo.rollBackProtection;
-        EPRINTF("INFO: Application update detected. Rollback protection adjusted.\r\n");
-    }
-    
-    // Measure everything up to the embedded signature trailer and make sure the digest matches the trailer
-    Dice_SHA256_Block((uint8_t*)DICEAPPLICATIONAREASTART, DiceData.s.cert.signData.codeSize, DiceData.s.cert.signData.codeName);
-    if(memcmp(DiceData.s.cert.signData.codeName, DiceData.s.codeSignaturePtr->signedData.codeDigest, sizeof(DiceData.s.cert.signData.codeName)))
-    {
-        EPRINTF("WARNING: Application digest does not match with the embedded signature trailer, we go direcrtly to DFU mode!\r\n");
+        EPRINTF("WARNING: Application digest does not match with the embedded signature header, we go direcrtly to DFU mode!\r\n");
         retVal = DICE_LOAD_MODULE_FAILED;
         goto Cleanup;
     }
 
-    // Verify the code signature if we have an authorityPub
-    if(!DiceNullCheck(&DiceData.s.cert.signData.deviceInfo.authorityPub, sizeof(ecc_publickey)))
+    // If we have an authority do full authorization check
+    if(!DiceNullCheck(&DICERAMAREA->info.authorityPub, sizeof(ecc_publickey)))
     {
-        if((retVal = Dice_DSAVerify((uint8_t*)&DiceData.s.codeSignaturePtr->signedData, sizeof(DiceData.s.codeSignaturePtr->signedData), &DiceData.s.codeSignaturePtr->signature, &DiceData.s.cert.signData.deviceInfo.authorityPub)) != DICE_SUCCESS)
+        if(DICEAPPHDR->s.sign.issueDate < DICERAMAREA->info.rollBackProtection)
         {
-            EPRINTF("WARNING: Authority signature verification of embedded signature trailer failed, we go direcrtly to DFU mode!\r\n");
+            EPRINTF("TimeStamp latest issued App: %s\r", asctime(localtime((time_t*)&DICERAMAREA->info.rollBackProtection)));
+            EPRINTF("TimeStamp of the installed App:   %s\r", asctime(localtime((time_t*)&DICEAPPHDR->s.sign.issueDate)));
+            EPRINTF("WARNING: Application rollback was detected, we go direcrtly to DFU mode!\r\n");
+            retVal = DICE_LOAD_MODULE_FAILED;
+            goto Cleanup;
+        }
+
+        // If the current application is newer than the previous one, crank the monotonic counter forward
+        if(DICEAPPHDR->s.sign.issueDate > DICERAMAREA->info.rollBackProtection)
+        {
+            if((retVal = DiceWriteDataEEProm(&DICEFUSEAREA->info.rollBackProtection, &DICEAPPHDR->s.sign.issueDate, 1)) != DICE_SUCCESS)
+            {
+                EPRINTF("ERROR: Rollback protection could not be updated!\r\n");
+                retVal = DICE_FAILURE;
+                goto Cleanup;
+            }
+            DICERAMAREA->info.rollBackProtection = DICEAPPHDR->s.sign.issueDate;
+            EPRINTF("INFO: Rollback protection updated to %s\r" , asctime(localtime((time_t*)&DICEAPPHDR->s.sign.issueDate)));
+        }
+
+        // Verify the App header signature
+        if((retVal = Dice_DSAVerify((uint8_t*)&DICEAPPHDR->s.sign, sizeof(DICEAPPHDR->s.sign), &DICEAPPHDR->s.signature, &DICERAMAREA->info.authorityPub)) != DICE_SUCCESS)
+        {
+            EPRINTF("WARNING: Authority signature verification of App signature failed, we go direcrtly to DFU mode!\r\n");
             retVal = DICE_LOAD_MODULE_FAILED;
             goto Cleanup;
         }
     }
     else
     {
-        EPRINTF("INFO: No authority set, signature verification is skipped.\r\n");
+        EPRINTF("INFO: No authority set, App verification is skipped.\r\n");
     }
 
     // Derive the compundDevice key
-    Dice_HMAC_SHA256_Block((uint8_t*)&DICEFUSEAREA->s.devicePrv, sizeof(DICEFUSEAREA->s.devicePrv), DiceData.s.cert.signData.codeName, sizeof(DiceData.s.cert.signData.codeName), (uint8_t*)&seed);
-    if((retVal = Dice_DeriveDsaKeyPair(&DiceData.s.cert.signData.compoundPub, &DiceData.s.compoundPrv, &seed, (uint8_t*)DICECOMPOUNDDERIVATIONLABEL, sizeof(DICECOMPOUNDDERIVATIONLABEL) - 1)) != DICE_SUCCESS)
+    Dice_HMAC_SHA256_Block((uint8_t*)&DICEFUSEAREA->devicePrv, sizeof(DICEFUSEAREA->devicePrv), DICEAPPHDR->s.sign.appDigest, sizeof(DICEAPPHDR->s.sign.appDigest), (uint8_t*)&seed);
+    if((retVal = Dice_DeriveDsaKeyPair(&DICERAMAREA->compoundPub, &DICERAMAREA->compoundPrv, &seed, (uint8_t*)DICECOMPOUNDDERIVATIONLABEL, sizeof(DICECOMPOUNDDERIVATIONLABEL) - 1)) != DICE_SUCCESS)
     {
         EPRINTF("ERROR: Compound key derivation failed!\r\n");
         goto Cleanup;
     }
     
     // Derive the alternate key if we are supposed to
-    if(!DiceNullCheck(DiceData.s.codeSignaturePtr->signedData.alternateDigest, sizeof(DiceData.s.codeSignaturePtr->signedData.alternateDigest)))
+    if(!DiceNullCheck(DICEAPPHDR->s.sign.alternateDigest, sizeof(DICEAPPHDR->s.sign.alternateDigest)))
     {
-        Dice_HMAC_SHA256_Block((uint8_t*)&DICEFUSEAREA->s.devicePrv, sizeof(DICEFUSEAREA->s.devicePrv), DiceData.s.codeSignaturePtr->signedData.alternateDigest, sizeof(DiceData.s.codeSignaturePtr->signedData.alternateDigest), (uint8_t*)&seed);
-        if((retVal = Dice_DeriveDsaKeyPair(&DiceData.s.cert.signData.alternatePub, &DiceData.s.alternatePrv, &seed, (uint8_t*)DICECOMPOUNDDERIVATIONLABEL, sizeof(DICECOMPOUNDDERIVATIONLABEL) - 1)) != DICE_SUCCESS)
+        Dice_HMAC_SHA256_Block((uint8_t*)&DICEFUSEAREA->devicePrv, sizeof(DICEFUSEAREA->devicePrv), DICEAPPHDR->s.sign.alternateDigest, sizeof(DICEAPPHDR->s.sign.alternateDigest), (uint8_t*)&seed);
+        if((retVal = Dice_DeriveDsaKeyPair(&DICERAMAREA->alternatePub, &DICERAMAREA->alternatePrv, &seed, (uint8_t*)DICECOMPOUNDDERIVATIONLABEL, sizeof(DICECOMPOUNDDERIVATIONLABEL) - 1)) != DICE_SUCCESS)
         {
             EPRINTF("ERROR: Alternate key derivation failed!\r\n");
             goto Cleanup;
         }
     }
     
-    // Sign the DiceData with the device key
-    if((retVal = Dice_DSASign((uint8_t*)&DiceData.s.cert.signData, sizeof(DiceData.s.cert.signData), &DICEFUSEAREA->s.devicePrv, &DiceData.s.cert.signature)) != DICE_SUCCESS)
+    // Issue the compound cert
     {
-        EPRINTF("ERROR: Device certificate signing failed!\r\n");
-        goto Cleanup;
+        DICE_X509_TBS_DATA x509DeviceCertData = {{{0},
+                                                  "DICECore", "MSFT", "US",
+                                                  &DICEFUSEAREA->info.devicePub, &DICEFUSEAREA->devicePrv
+                                                 },
+                                                 1483228800, 2145830400,
+                                                 {{0},
+                                                  "DICEApp", "OEM", "US",
+                                                  &DICERAMAREA->compoundPub, &DICERAMAREA->compoundPrv
+                                                 }};
+        Dice_KDF_SHA256_Seed(x509DeviceCertData.Issuer.CertSerialNum,
+                             sizeof(x509DeviceCertData.Issuer.CertSerialNum),
+                             (const uint8_t*)&DICEFUSEAREA->info.devicePub,
+                             sizeof(DICEFUSEAREA->info.devicePub),
+                             NULL,
+                             (const uint8_t*)x509DeviceCertData.Issuer.CommonName,
+                             strlen(x509DeviceCertData.Issuer.CommonName));
+        x509DeviceCertData.Issuer.CertSerialNum[0] &= 0x7F; // Make sure the serial number is always positive
+        Dice_KDF_SHA256_Seed(x509DeviceCertData.Subject.CertSerialNum,
+                             sizeof(x509DeviceCertData.Subject.CertSerialNum),
+                             (const uint8_t*)&DICERAMAREA->compoundPub,
+                             sizeof(DICERAMAREA->compoundPrv),
+                             NULL,
+                             (const uint8_t*)x509DeviceCertData.Subject.CommonName,
+                             strlen(x509DeviceCertData.Subject.CommonName));
+        x509DeviceCertData.Subject.CertSerialNum[0] &= 0x7F; // Make sure the serial number is always positive
+
+        uint8_t* cerBuffer = (uint8_t*)malloc(DER_MAX_TBS);
+        if(cerBuffer == NULL)
+        {
+            EPRINTF("ERROR: No Memory!\r\n");
+            retVal = DICE_FAILURE;
+            goto Cleanup;
+        }
+        DERBuilderContext cerCtx = {0};
+        DERInitContext(&cerCtx, cerBuffer, DER_MAX_TBS);
+        X509MakeCertBody(&cerCtx, &x509DeviceCertData);
+        X509MakeCompoundCert(&cerCtx, &DICERAMAREA->info, DICEAPPHDR);
+        X509CompleteCert(&cerCtx, &x509DeviceCertData);
+        DICERAMAREA->info.certBagLen += DERtoPEM(&cerCtx,
+                                                 0,
+                                                 &DICERAMAREA->info.certBag[DICERAMAREA->info.certBagLen],
+                                                 DICERAMDATASIZE - ((uint32_t)&DICERAMAREA->info.certBag[DICERAMAREA->info.certBagLen] - DICERAMSTART));
+        DICERAMAREA->info.size = sizeof(DicePublicInfo_t) - 1 + DICERAMAREA->info.certBagLen;
     }
 
 Cleanup:
-    DicePrintInfo();
-    DiceSecure();
+//    DicePrintInfo();
     return retVal;
 }
 
@@ -302,6 +397,7 @@ DICE_STATUS DiceSecure(void)
         retVal = DICE_FAILURE;
         goto Cleanup;
     }
+    EPRINTF("INFO: Firewall is UP!\r\n");
     
 Cleanup:
     return retVal;

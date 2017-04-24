@@ -36,6 +36,14 @@ typedef unsigned int size_t;          // 32-bit unsigned integer
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #endif
 
+#ifndef SWAP_UINT16
+#define SWAP_UINT16(x) (((x) >> 8) | ((x) << 8))
+#endif
+
+#ifndef SWAP_UINT32
+#define SWAP_UINT32(x) (((x) >> 24) | (((x) & 0x00FF0000) >> 8) | (((x) & 0x0000FF00) << 8) | ((x) << 24))
+#endif
+
 #ifndef true
 #define true (1)
 #endif
@@ -57,7 +65,7 @@ typedef unsigned int size_t;          // 32-bit unsigned integer
 typedef int bool;
 #endif
 #else
-#define bool int
+//#define bool int
 #endif
 
 #define WORD_ALIGN(x) ((x & 0x3) ? ((x >> 2) + 1) << 2 : x)

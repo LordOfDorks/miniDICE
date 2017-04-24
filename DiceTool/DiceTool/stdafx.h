@@ -15,10 +15,13 @@
 #include <unordered_map>
 #include <Windows.h>
 #include <Wincrypt.h>
+#include <BCrypt.h>
+#include <NCrypt.h>
 #include "STDFUPRTINC.h"
 #include "STDFUFilesInc.h"
 #include "DiceCore.h"
 #include "DiceEcc.h"
+#include "DiceBase64.h"
 
 
 

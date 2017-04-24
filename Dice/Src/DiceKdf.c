@@ -105,9 +105,7 @@ void Dice_KDF_SHA256(
 }
 
 //
-// Do KDF from SP800-108 -- HMAC based counter mode. This function does a single
-// iteration. The counter parameter is incremented before it is used so that
-// a caller can set counter to 0 for the first iteration.
+// Do KDF from SP800-108 -- HMAC based counter mode.
 // @param out the output digest of a single iteration (a SHA256 digest)
 // @param key the HMAC key
 // @param keySize

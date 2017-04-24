@@ -91,7 +91,7 @@ BigIntToBigVal(bigval_t *tgt, const void *in, size_t inSize);
 // @param out  pointer to the big endian value to be produced
 // @param in   pointer to the bigval_t to convert
 //
-void
+int
 BigValToBigInt(void *out, const bigval_t *tgt);
 
 //

@@ -81,7 +81,7 @@
           <AfterMake>
             <RunUserProg1>1</RunUserProg1>
             <RunUserProg2>0</RunUserProg2>
-            <UserProg1Name>cmd.exe /C "..\..\DiceTool.exe CAP payload\payload.hex C:\Git\miniDice\authority"</UserProg1Name>
+            <UserProg1Name>cmd.exe /C "..\..\DiceTool\release\DiceTool.exe CAP payload\payload.hex -cf=..\..\AppAuthority.cer"</UserProg1Name>
             <UserProg2Name></UserProg2Name>
             <UserProg1Dos16Mode>0</UserProg1Dos16Mode>
             <UserProg2Dos16Mode>0</UserProg2Dos16Mode>
@@ -272,8 +272,8 @@
               </OCR_RVCT3>
               <OCR_RVCT4>
                 <Type>1</Type>
-                <StartAddress>0x8008000</StartAddress>
-                <Size>0x28000</Size>
+                <StartAddress>0x800b200</StartAddress>
+                <Size>0x24e00</Size>
               </OCR_RVCT4>
               <OCR_RVCT5>
                 <Type>1</Type>
@@ -297,8 +297,8 @@
               </OCR_RVCT8>
               <OCR_RVCT9>
                 <Type>0</Type>
-                <StartAddress>0x20000200</StartAddress>
-                <Size>0x4e00</Size>
+                <StartAddress>0x20001000</StartAddress>
+                <Size>0x4000</Size>
               </OCR_RVCT9>
               <OCR_RVCT10>
                 <Type>0</Type>
@@ -357,7 +357,7 @@
             </VariousControls>
           </Aads>
           <LDads>
-            <umfTarg>0</umfTarg>
+            <umfTarg>1</umfTarg>
             <Ropi>0</Ropi>
             <Rwpi>0</Rwpi>
             <noStLib>0</noStLib>
@@ -623,6 +623,16 @@
               <FileName>DiceHelper.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\Dice\Src\DiceHelper.c</FilePath>
+            </File>
+            <File>
+              <FileName>DiceDerEnc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Dice\Src\DiceDerEnc.c</FilePath>
+            </File>
+            <File>
+              <FileName>DiceBase64.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\Dice\Src\DiceBase64.c</FilePath>
             </File>
           </Files>
         </Group>

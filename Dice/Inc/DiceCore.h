@@ -1,31 +1,43 @@
+#include <stdbool.h>
 #include "DiceSha256.h"
 #include "DiceHmac.h"
 #include "DiceKdf.h"
 #include "DiceEcc.h"
 #include "DiceStatus.h"
+#include "DiceDerEnc.h"
 
-#define DICEMAJORVERSION            (0x0001)
-#define DICEMINORVERSION            (0x0002)
-#define DICEDATE                    (1490281840)
+#define DICEVERSION                 (0x00010003)
+#define DICETIMESTAMP               (1492105873)
+//#define DICEDATE                    "170412000000Z"
 #define DICEMAGIC                   (0x45434944) //'DICE'
-#define DICEPROVISIONEDID           (0x44494345) //'ECID'
-#define DICEMARKER                  (0x4B52414D45434944)
-#define DICEDATAEEPROMSTART         (0x08080000)
-#define DICEDATAEEPROMSIZE          (0x00000100)
-#define DICEFUSEAREA                ((PDiceFuse_t)0x08080000)
-#define DICERAMSTART                (0x20000000)
-#define DICERAMSIZE                 (0x00000200)
-#define DICEWIPERAMSTART            (DICERAMSTART + DICERAMSIZE)
-#define DICEWIPERAMSIZE             (0x00005000 - DICERAMSIZE)
+//#define DICEPROVISIONEDID           (0x44494345) //'ECID'
+//#define DICEMARKER                  (0x4B52414D45434944)
 #ifndef SILENTDICE
-#define DICEAPPLICATIONOFFSET       (0x00008000)
+#define DICEBOOTLOADERSIZE          (0x0000B000)
 #else
-#define DICEAPPLICATIONOFFSET       (0x00005400)
+#define DICEBOOTLOADERSIZE          (0x00005400)
 #endif
-#define DICEAPPLICATIONAREASTART    (0x08000000 + DICEAPPLICATIONOFFSET)
-#define DICEAPPLICATIONAREASIZE     (0x00030000 - DICEAPPLICATIONOFFSET)
+#define DICEDATAEEPROMSTART         (0x08080000)
+#define DICEDATAEEPROMSIZE          (0x00001800)
+#define DICERAMSTART                (0x20000000)
+#define DICERAMSIZE                 (0x00005000)
+#define DICEFLASHSTART              (0x08000000)
+#define DICEFLASHSIZE               (0x00030000)
+
+#define DICEFUSEDATASIZE            (0x600)
+#define DICEAPPSIGNATUREHDRSIZE     (0x200)
+#define DICERAMDATASIZE             (0x1000)
+#define DICEMAXPERSISTEDCERT        (DICEFUSEDATASIZE - (sizeof(DicePersistedData_t) - 1))
+
+#define DICEFUSEAREA                ((PDicePersistedData_t)DICEDATAEEPROMSTART)
+#define DICEREQUESTAREA             ((PDicePersistedData_t)(DICEDATAEEPROMSTART + DICEFUSEDATASIZE))
+#define DICERAMAREA                 ((PDiceData_t)DICERAMSTART)
+#define DICEAPPHDR                  ((PDiceEmbeddedSignature_t)(DICEFLASHSTART + DICEBOOTLOADERSIZE))
+#define DICEAPPENTRY                (DICEFLASHSTART + DICEBOOTLOADERSIZE + sizeof(DiceEmbeddedSignature_t))
+#define DICEAPPMAXSIZE              (DICEFLASHSIZE - DICEBOOTLOADERSIZE)
+#define DICEWIPERAMSTARTOFFSET      (sizeof(DiceData_t) - 1 + DICERAMAREA->info.certBagLen)
+//#define DICEWIPERAMSIZE             (DICERAMSIZE - DICEWIPERAMSTART)
 #define DICECOMPOUNDDERIVATIONLABEL "DiceCompoundKey"
-#define DICEDATAPTR                 ((PDiceData_t)DICERAMSTART)
 
 #define DICEBLINKERROR              (1)
 #define DICEBLINKRESETME            (2)
@@ -44,83 +56,68 @@
 
 typedef struct
 {
-    uint32_t importedSeed:1;
     uint32_t noClear:1;
-    uint32_t noBootNonce:1;
-    uint32_t inheritedAuthority:1;
 } DiceProperties_t, *PDiceProperties_t;
 
 typedef struct
 {
     uint32_t magic;                 // 4
+    uint32_t size;                  // 4
     DiceProperties_t properties;    // 4
     uint32_t rollBackProtection;    // 4
-    ecc_publickey authorityPub;     // 19 * 4 = 76
+    uint32_t bootCounter;           // 4
     ecc_publickey devicePub;        // 19 * 4 = 76
-} DicePublic_t, *PDicePublic_t;     // Size = 164
-
-typedef union {
-    struct {
-        DicePublic_t deviceInfo;   // 164
-        ecc_privatekey devicePrv;  // 9 * 4 = 36
-    } s;                           // Used Size = 200
-    uint32_t raw32[64];
-    uint8_t raw8[256];             // Final Size = 256
-} DiceFuse_t, *PDiceFuse_t;
+    ecc_publickey authorityPub;     // 19 * 4 = 76
+    uint32_t dontTouchSize;         // 4
+    uint32_t certBagLen;            // 4
+    char certBag[1];
+} DicePublicInfo_t, *PDicePublicInfo_t; // 180 + certBagLen
 
 typedef struct
 {
-    struct
-    {
-        DicePublic_t deviceInfo;                 // 164
-        uint32_t codeSize;                       // 4
-        uint32_t issueDate;                      // 4
-        uint8_t codeName[SHA256_DIGEST_LENGTH];  // 32
-        ecc_publickey compoundPub;               // 19 * 4 = 76
-        ecc_publickey alternatePub;              // 19 * 4 = 76
-        uint8_t bootNonce[SHA256_DIGEST_LENGTH]; // 32
-    } signData;
-    ecc_signature signature;                     // 18 * 4 = 72
-} DiceCert_t, *PDiceCert_t;                      // Size = 460
-
-typedef struct
-{
-    uint64_t startMarker;
-    struct
-    {
-        uint32_t codeSize;
-        uint32_t issueDate;
-        uint8_t codeDigest[SHA256_DIGEST_LENGTH];
-        uint8_t alternateDigest[SHA256_DIGEST_LENGTH];
-    } signedData;
-    ecc_signature signature;
-    uint64_t endMarker;
-} DiceEmbeddedSignature_t, *PDiceEmbeddedSignature_t;
+    uint32_t magic;                 // 4
+    ecc_privatekey devicePrv;       // 9 * 4 = 36
+    DicePublicInfo_t info;          // 180 + certBagLen
+} DicePersistedData_t, *PDicePersistedData_t;
 
 typedef union
 {
     struct
     {
-        DiceCert_t cert;                             // 460
-        ecc_privatekey compoundPrv;                  // 9 * 4 = 36
-        ecc_privatekey alternatePrv;                 // 9 * 4 = 36
-        PDiceEmbeddedSignature_t codeSignaturePtr;   // 4
-    } s;                                             // 536
-    uint32_t raw32[136];
-    uint8_t raw8[544];
+        struct
+        {
+            uint32_t magic;
+            uint32_t codeSize;
+            uint32_t version;
+            uint32_t issueDate;
+            char name[16];
+            uint8_t appDigest[SHA256_DIGEST_LENGTH];
+            uint8_t alternateDigest[SHA256_DIGEST_LENGTH];
+        } sign;
+        ecc_signature signature;
+    } s;
+    uint32_t raw32[DICEAPPSIGNATUREHDRSIZE / sizeof(uint32_t)];
+    uint8_t raw8[DICEAPPSIGNATUREHDRSIZE];
+} DiceEmbeddedSignature_t, *PDiceEmbeddedSignature_t;
+
+typedef struct
+{
+    uint32_t magic;                              // 4
+    ecc_privatekey compoundPrv;                  // 9 * 4 = 36
+    ecc_privatekey alternatePrv;                 // 9 * 4 = 36
+    ecc_publickey compoundPub;                   // 19 * 4 = 76
+    ecc_publickey alternatePub;                  // 19 * 4 = 76
+    DicePublicInfo_t info;                       // @0xE8: 168 + certBagLen
 } DiceData_t, *PDiceData_t;
 
-extern DiceData_t DiceData;
-extern const DiceEmbeddedSignature_t trailer;
-extern volatile uint32_t touch;
-
 DICE_STATUS DiceLockDown(void);
+void DiceGenerateDFUString(void);
 DICE_STATUS DiceInitialize(void);
 DICE_STATUS DiceSecure(void);
-void DiceTouchData(void);
 bool DiceNullCheck(void* dataPtr, uint32_t dataSize);
 void DiceGetRandom(uint8_t* entropyPtr, uint32_t entropySize);
 void DicePrintInfo(void);
 void DicePrintInfoHex(char* varName, void* dataPtr, uint32_t dataSize);
-bool DiceVerifyDeviceCertificate(void);
 void DiceBlink(uint32_t info);
+
+#include "DiceX509Bldr.h"

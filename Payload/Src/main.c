@@ -131,18 +131,13 @@ int main(void)
   MX_RNG_Init();
   MX_RTC_Init();
   MX_USART2_UART_Init();
-//  MX_USB_DEVICE_Init();
+  MX_USB_DEVICE_Init();
 
   /* USER CODE BEGIN 2 */
     EPRINTF("==========================\r\n");
-    EPRINTF("    DICE APP: Payload!\r\n");
+    EPRINTF("    DICE APP: Payload! \r\n");
     EPRINTF("==========================\r\n");
-    DiceTouchData();
-
-    DicePrintInfoHex("DiceCertificate", &DICEDATAPTR->s.cert, sizeof(DICEDATAPTR->s.cert));
-    EPRINTF("INFO: DICE Device Certificate verification = %s!\r\n\r\n", DiceVerifyDeviceCertificate() ? "VALID!" : "INVALID!");
-
-    MX_USB_DEVICE_Init();
+    EPRINTF("DICE Certificate Bag(%d):\r\n%s\r\n", DICERAMAREA->info.certBagLen, DICERAMAREA->info.certBag);
   /* USER CODE END 2 */
 
   /* Infinite loop */

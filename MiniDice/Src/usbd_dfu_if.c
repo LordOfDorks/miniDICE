@@ -67,7 +67,7 @@
 /** @defgroup USBD_DFU_Private_Defines
   * @{
   */ 
-#define FLASH_DESC_STR      "@Dice /0x08005400/43*001Kg/0x08010000/64*001Kg/0x08020000/64*001Kg/0x08080000/1*256Bf/0x08080100/79*256Bg"
+#define FLASH_DESC_STR      "@miniDICE /0x08000000/64*001Kg/0x08010000/64*001Kg/0x08020000/64*001Kg"
 /* USER CODE BEGIN PRIVATE_DEFINES */
 #define FLASH_ERASE_TIME    (uint16_t)50
 #define FLASH_PROGRAM_TIME  (uint16_t)50
@@ -191,7 +191,8 @@ uint16_t MEM_If_Erase_FS(uint32_t Add)
   uint16_t result = USBD_FAIL;
   HAL_StatusTypeDef halResult = HAL_OK;
 
-  if((Add >= 0x08000000) && (Add < 0x08030000))
+  if((Add >= (DICEFLASHSTART + DICEBOOTLOADERSIZE)) &&
+     (Add < (DICEFLASHSTART + DICEFLASHSIZE)))
   {
       uint32_t PageError = 0;
       FLASH_EraseInitTypeDef erase = {FLASH_TYPEERASE_PAGES, Add, 8};
@@ -205,8 +206,10 @@ uint16_t MEM_If_Erase_FS(uint32_t Add)
           goto Cleanup;
       }
   }
-  else if(((!DiceData.s.cert.signData.deviceInfo.properties.noClear) && ((Add >= 0x08080000) && (Add < 0x080800100))) ||
-          ((Add >= 0x08080100) && (Add < 0x080850000)))
+  else if((!DICERAMAREA->info.properties.noClear) &&
+          (!__HAL_FIREWALL_IS_ENABLED()) &&
+          (Add >= (uint32_t)&DICEFUSEAREA->info) &&
+          ((Add + 256) < ((uint32_t)&DICEFUSEAREA->info + DICEFUSEDATASIZE)))
   {
       for(uint32_t n = 0; n < 256; n += sizeof(uint32_t))
       {
@@ -225,9 +228,9 @@ uint16_t MEM_If_Erase_FS(uint32_t Add)
 Cleanup:
 //  EPRINTF("INFO: MEM_If_Erase_FS(0x%08x) = %s\r\n", Add, (result==USBD_OK) ? "USBD_OK" : "USBD_FAIL");
   if(result == USBD_OK)
-      EPRINTF(".");
+      EPRINTF("E");
   else
-      EPRINTF("x");
+      EPRINTF(".");
   return result;
   /* USER CODE END 2 */ 
 }
@@ -250,12 +253,15 @@ uint16_t MEM_If_Write_FS(uint8_t *src, uint8_t *dest, uint32_t Len)
   {
       for(uint32_t m = 0, halResult = HAL_BUSY; ((m < 10) && (halResult == HAL_BUSY)); m++)
       {
-          if(((uint32_t)dest >= 0x08000000) && ((uint32_t)dest < 0x08030000))
+          if(((uint32_t)dest >= (DICEFLASHSTART + DICEBOOTLOADERSIZE)) &&
+             ((uint32_t)dest < (DICEFLASHSTART + DICEFLASHSIZE)))
           {
               halResult = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, (uint32_t)&dest[n], *((uint32_t*)&src[n]));
           }
-          else if(((!DiceData.s.cert.signData.deviceInfo.properties.noClear) && (((uint32_t)dest >= 0x08080000) && ((uint32_t)dest < 0x080800100))) ||
-                  (((uint32_t)dest >= 0x08080100) && ((uint32_t)dest < 0x080850000)))
+          else if((!DICERAMAREA->info.properties.noClear) &&
+                  (!__HAL_FIREWALL_IS_ENABLED()) &&
+                  ((uint32_t)dest >= (uint32_t)&DICEFUSEAREA->info) &&
+                  (((uint32_t)dest + Len) < ((uint32_t)&DICEFUSEAREA->info + DICEFUSEDATASIZE)))
           {
               halResult = HAL_FLASHEx_DATAEEPROM_Program(FLASH_TYPEPROGRAM_WORD, (uint32_t)&dest[n], *((uint32_t*)&src[n]));
           }
@@ -271,11 +277,11 @@ uint16_t MEM_If_Write_FS(uint8_t *src, uint8_t *dest, uint32_t Len)
   }
 
 Cleanup:
-//  EPRINTF("INFO: MEM_If_Write_FS(0x%08x, 0x%08x, %d) = %s\r\n", (unsigned int)src, (unsigned int)dest, Len, (result==USBD_OK) ? "USBD_OK" : "USBD_FAIL");
+//  EPRINTF("INFO: MEM_If_Write_FS(0x%08x, %d) = %s\r\n", (unsigned int)dest, Len, (result==USBD_OK) ? "USBD_OK" : "USBD_FAIL");
   if(result == USBD_OK)
-      EPRINTF("o");
+      EPRINTF("W");
   else
-      EPRINTF("x");
+      EPRINTF(".");
   return result;
   /* USER CODE END 3 */ 
 }
@@ -292,17 +298,20 @@ uint8_t *MEM_If_Read_FS (uint8_t *src, uint8_t *dest, uint32_t Len)
 {
   /* Return a valid address to avoid HardFault */
   /* USER CODE BEGIN 4 */ 
-    if(((uint32_t)src >= 0x08080000) && ((uint32_t)src < 0x080800100))
+    // TODO: Make sure we filter what can be read so no secrets leak
+    uint8_t* retPtr = NULL;
+    if(((src < (uint8_t*)DICEFUSEAREA) && (&src[Len - 1] >= (uint8_t*)&DICEFUSEAREA->info)) ||
+       ((src < (uint8_t*)DICERAMAREA) && (&src[Len - 1] >= (uint8_t*)&DICERAMAREA->info)))
     {
-        memcpy(dest, src, Len);
-//        EPRINTF("INFO: MEM_If_Read_FS(0x%08x, 0x%08x, %d) = USBD_OK\r\n", (unsigned int)src, (unsigned int)dest, Len);
-        EPRINTF("O");
+        retPtr = 0;
     }
+    else retPtr = src;
+//  EPRINTF("INFO: MEM_If_Read_FS(0x%08x, %d) = 0x%08x\r\n", (unsigned int)src, Len, retPtr);
+    if(retPtr != NULL)
+        EPRINTF("R");
     else
-    {
-        memset(dest, 0x00, Len);
-    }
-    return (uint8_t*)(USBD_OK);
+        EPRINTF(".");
+    return retPtr;
   /* USER CODE END 4 */ 
 }
 
