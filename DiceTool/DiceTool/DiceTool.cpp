@@ -1202,9 +1202,9 @@ void RunCAP(std::unordered_map<std::wstring, std::wstring> param)
 }
 
 // Debug parameter:
-// SIP diceID.dfu 9252851cf0e10901d5538f2fb92adb5ef47b7fb0 -at=9d0d05f53c5ea8260264c584862ee2de56eaf974 -noClear
+// SIP diceID.dfu -at=9252851cf0e10901d5538f2fb92adb5ef47b7fb0 -ct=9d0d05f53c5ea8260264c584862ee2de56eaf974 -noClear
 // ECP diceID2.dfu
-// CAP payload.hex -at=9d0d05f53c5ea8260264c584862ee2de56eaf974
+// CAP payload.hex -ct=9d0d05f53c5ea8260264c584862ee2de56eaf974
 
 void PrintHelp(void)
 {
