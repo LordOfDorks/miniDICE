@@ -239,7 +239,7 @@ int main(void)
   MX_AES_Init();
   MX_SPI1_Init();
   MX_USART4_UART_Init();
-//  MX_USB_DEVICE_Init();
+  MX_USB_DEVICE_Init();
 
   /* USER CODE BEGIN 2 */
   uint32_t ipAddr = 0;

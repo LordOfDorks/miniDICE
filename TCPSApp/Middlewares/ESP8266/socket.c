@@ -62,6 +62,24 @@ HAL_StatusTypeDef InitializeESP8266(
         return retVal;
     }
 
+    fprintf(&__net, "AT+CWMODE_DEF=1\r\n");
+    if((retVal = ESP8266GetResponse(NULL, 0, NULL, TIMEOUTLEFT(timeout, startTime))) != HAL_OK)
+    {
+        return retVal;
+    }
+
+    fprintf(&__net, "AT+CWJAP_DEF=\"MSFTGUEST\",\"\"\r\n");
+    if((retVal = ESP8266GetResponse(NULL, 0, NULL, TIMEOUTLEFT(timeout, startTime))) != HAL_OK)
+    {
+        return retVal;
+    }
+
+    fprintf(&__net, "AT+PING=\"pool.ntp.org\"\r\n");
+    if((retVal = ESP8266GetResponse(NULL, 0, NULL, TIMEOUTLEFT(timeout, startTime))) != HAL_OK)
+    {
+        return retVal;
+    }
+
     fprintf(&__net, "AT+CIPMUX=1\r\n");
     if((retVal = ESP8266GetResponse(NULL, 0, NULL, TIMEOUTLEFT(timeout, startTime))) != HAL_OK)
     {
