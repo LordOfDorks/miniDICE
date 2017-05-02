@@ -1,0 +1,14 @@
+Run GenAuthorities.cmd
+Wipe the device with ST-Link
+Compile and flash miniDICE
+Powercycle device
+Read DiceID.dfu from the device
+DiceTool\Release\DiceTool.exe SIP DiceID.dfu -af=DiceAuthority.cer -cf=AppAuthority.cer -noClear
+Write DiceID-Auth.dfu back to the device
+Compile payloal app
+Write payload with DfuSe into the device and "Leave Dfu mode"
+App runs
+Hold update button and reset
+upload DiceID.dfu again
+DiceTool\Release\DiceTool.exe ECP DiceID.dfu
+start DiceID.p7b

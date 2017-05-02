@@ -18,6 +18,19 @@ void PrintHex(std::vector<BYTE> data)
     }
 }
 
+void PrintHexC(std::wstring varName, std::vector<BYTE> data)
+{
+    wprintf(L"uint8_t %s[%d] = {", varName.c_str(), data.size());
+    for (uint32_t n = 0; n < data.size(); n++)
+    {
+        if ((n < data.size()) && (n != 0)) wprintf(L",");
+        if ((n % 0x10) != 0) wprintf(L" ");
+        else  wprintf(L"\r\n");
+        wprintf(L"0x%02x", data[n]);
+    }
+    wprintf(L"\r\n};\r\n");
+}
+
 void WriteToFile(
     std::wstring fileName,
     std::vector<BYTE> data
@@ -155,6 +168,145 @@ std::vector<BYTE> CertThumbPrint(PCCERT_CONTEXT hCert)
     return digest;
 }
 
+std::vector<BYTE> IssueDeviceCertificate(
+    std::vector<BYTE> derDevCert,
+    PCCERT_CONTEXT deviceAuthCert,
+    DWORD dwKeySpec,
+    HCRYPTPROV_OR_NCRYPT_KEY_HANDLE deviceAuth
+)
+{
+    std::exception_ptr pendingException = NULL;
+    DWORD retVal = STDFUFILES_NOERROR;
+    BCRYPT_ALG_HANDLE hRng = NULL;
+    PCCERT_CONTEXT devCert = NULL;
+    BCRYPT_KEY_HANDLE devPub = NULL;
+    DWORD result;
+    PBYTE pbEncAuthorityKeyInfo = NULL;
+    DWORD cbEncAuthorityKeyInfo = 0;
+
+    if ((retVal = BCryptOpenAlgorithmProvider(&hRng, BCRYPT_RNG_ALGORITHM, NULL, 0)) != 0)
+    {
+        throw retVal;
+    }
+
+    // Open the selfsigned device certificate and verify it
+    if ((devCert = CertCreateCertificateContext(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, derDevCert.data(), derDevCert.size())) == NULL)
+    {
+        throw retVal;
+    }
+    if (!CryptImportPublicKeyInfoEx2(X509_ASN_ENCODING, &devCert->pCertInfo->SubjectPublicKeyInfo, 0, NULL, &devPub))
+    {
+        throw DICE_INVALID_PARAMETER;
+    }
+    DWORD validityFlags = CERT_STORE_SIGNATURE_FLAG | CERT_STORE_TIME_VALIDITY_FLAG;
+    if (!CertVerifySubjectCertificateContext(devCert, devCert, &validityFlags))
+    {
+        throw DICE_INVALID_PARAMETER;
+    }
+
+    // Create the new device certificate to issue
+    CERT_INFO certInfo = { 0 };
+    certInfo.dwVersion = CERT_V3;
+    certInfo.SerialNumber.cbData = 16;
+    std::vector<BYTE> certSerial(certInfo.SerialNumber.cbData, 0);
+    certInfo.SerialNumber.pbData = certSerial.data();
+    if ((retVal = BCryptGenRandom(hRng, certSerial.data(), certSerial.size(), 0)) != 0)
+    {
+        throw retVal;
+    }
+    certInfo.SignatureAlgorithm.pszObjId = szOID_ECDSA_SHA256;
+    certInfo.Issuer.cbData = deviceAuthCert->pCertInfo->Issuer.cbData;
+    certInfo.Issuer.pbData = deviceAuthCert->pCertInfo->Issuer.pbData;
+    certInfo.Subject.cbData = devCert->pCertInfo->Subject.cbData;
+    certInfo.Subject.pbData = devCert->pCertInfo->Subject.pbData;
+    SYSTEMTIME systemTime;
+    GetSystemTime(&systemTime);
+    SystemTimeToFileTime(&systemTime, &certInfo.NotBefore);
+    systemTime.wYear += 20;
+    SystemTimeToFileTime(&systemTime, &certInfo.NotAfter);
+    certInfo.SubjectPublicKeyInfo = devCert->pCertInfo->SubjectPublicKeyInfo;
+    certInfo.cExtension = devCert->pCertInfo->cExtension;
+    certInfo.rgExtension = devCert->pCertInfo->rgExtension;
+    for (UINT32 n = 0; n < certInfo.cExtension; n++)
+    {
+        if (!strcmp(certInfo.rgExtension[n].pszObjId, szOID_AUTHORITY_KEY_IDENTIFIER))
+        {
+            // Find the authority's key identifier
+            std::vector<BYTE> authorityKeyId;
+            CERT_AUTHORITY_KEY_ID_INFO keyIdInfo = { 0 };
+            keyIdInfo.CertSerialNumber.cbData = deviceAuthCert->pCertInfo->SerialNumber.cbData;
+            keyIdInfo.CertSerialNumber.pbData = deviceAuthCert->pCertInfo->SerialNumber.pbData;
+            keyIdInfo.CertIssuer.cbData = deviceAuthCert->pCertInfo->Issuer.cbData;
+            keyIdInfo.CertIssuer.pbData = deviceAuthCert->pCertInfo->Issuer.pbData;
+
+            for (UINT32 m = 0; m < deviceAuthCert->pCertInfo->cExtension; m++)
+            {
+                if (!strcmp(deviceAuthCert->pCertInfo->rgExtension[m].pszObjId, szOID_SUBJECT_KEY_IDENTIFIER))
+                {
+                    CRYPT_DIGEST_BLOB keyId = { 0 };
+                    DWORD keyidSize = sizeof(keyId);
+                    if (!CryptDecodeObject(X509_ASN_ENCODING,
+                        deviceAuthCert->pCertInfo->rgExtension[m].pszObjId,
+                        deviceAuthCert->pCertInfo->rgExtension[m].Value.pbData,
+                        deviceAuthCert->pCertInfo->rgExtension[m].Value.cbData,
+                        CRYPT_DECODE_NOCOPY_FLAG,
+                        &keyId, &keyidSize))
+                    {
+                        throw GetLastError();
+                    }
+                    authorityKeyId.resize(keyId.cbData);
+                    keyIdInfo.KeyId.cbData = (UINT32)authorityKeyId.size();
+                    keyIdInfo.KeyId.pbData = authorityKeyId.data();
+                    memcpy(keyIdInfo.KeyId.pbData, keyId.pbData, keyIdInfo.KeyId.cbData);
+                    break;
+                }
+            }
+            if (!CryptEncodeObjectEx(X509_ASN_ENCODING,
+                X509_AUTHORITY_KEY_ID,
+                &keyIdInfo,
+                CRYPT_ENCODE_ALLOC_FLAG,
+                NULL,
+                &certInfo.rgExtension[n].Value.pbData,
+                &certInfo.rgExtension[n].Value.cbData))
+            {
+                throw GetLastError();
+            }
+            break;
+        }
+    }
+
+    // Issue the new certificate
+    result = 0;
+    CRYPT_ALGORITHM_IDENTIFIER certAlgId = { szOID_ECDSA_SHA256,{ 0, NULL } };
+    if (!CryptSignAndEncodeCertificate(deviceAuth,
+        dwKeySpec,
+        X509_ASN_ENCODING,
+        X509_CERT_TO_BE_SIGNED,
+        &certInfo,
+        &certAlgId,
+        NULL,
+        NULL,
+        &result))
+    {
+        throw GetLastError();
+    }
+    std::vector<BYTE> newCert(result, 0);
+    if (!CryptSignAndEncodeCertificate(deviceAuth,
+        dwKeySpec,
+        X509_ASN_ENCODING,
+        X509_CERT_TO_BE_SIGNED,
+        &certInfo,
+        &certAlgId,
+        NULL,
+        newCert.data(),
+        &result))
+    {
+        throw GetLastError();
+    }
+
+    return newCert;
+}
+
 void SignDiceIdentityPackage(
     std::wstring fileName,
     PCCERT_CONTEXT deviceAuthCert,
@@ -245,119 +397,121 @@ void SignDiceIdentityPackage(
         retVal = CryptStringToBinaryA(encDevCert.c_str(), encDevCert.size(), CRYPT_STRING_BASE64HEADER, NULL, &result, NULL, NULL);
         std::vector<BYTE> rawCert(result, 0);
         retVal = CryptStringToBinaryA(encDevCert.c_str(), encDevCert.size(), CRYPT_STRING_BASE64HEADER, rawCert.data(), &result, NULL, NULL);
-        if ((devCert = CertCreateCertificateContext(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, rawCert.data(), rawCert.size())) == NULL)
-        {
-            throw retVal;
-        }
-        if (!CryptImportPublicKeyInfoEx2(X509_ASN_ENCODING, &devCert->pCertInfo->SubjectPublicKeyInfo, 0, NULL, &devPub))
-        {
-            throw DICE_INVALID_PARAMETER;
-        }
-        DWORD validityFlags = CERT_STORE_SIGNATURE_FLAG | CERT_STORE_TIME_VALIDITY_FLAG;
-        if (!CertVerifySubjectCertificateContext(devCert, devCert, &validityFlags))
-        {
-            throw DICE_INVALID_PARAMETER;
-        }
 
-        // Create the new device certificate to issue
-        CERT_INFO certInfo = { 0 };
-        certInfo.dwVersion = CERT_V3;
-        certInfo.SerialNumber.cbData = 16;
-        std::vector<BYTE> certSerial(certInfo.SerialNumber.cbData, 0);
-        certInfo.SerialNumber.pbData = certSerial.data();
-        if((retVal = BCryptGenRandom(hRng, certSerial.data(), certSerial.size(), 0)) != 0)
-        {
-            throw retVal;
-        }
-        certInfo.SignatureAlgorithm.pszObjId = szOID_ECDSA_SHA256;
-        certInfo.Issuer.cbData = deviceAuthCert->pCertInfo->Issuer.cbData;
-        certInfo.Issuer.pbData = deviceAuthCert->pCertInfo->Issuer.pbData;
-        certInfo.Subject.cbData = devCert->pCertInfo->Subject.cbData;
-        certInfo.Subject.pbData = devCert->pCertInfo->Subject.pbData;
-        SYSTEMTIME systemTime;
-        GetSystemTime(&systemTime);
-        SystemTimeToFileTime(&systemTime, &certInfo.NotBefore);
-        systemTime.wYear += 20;
-        SystemTimeToFileTime(&systemTime, &certInfo.NotAfter);
-        certInfo.SubjectPublicKeyInfo = devCert->pCertInfo->SubjectPublicKeyInfo;
-        certInfo.cExtension = devCert->pCertInfo->cExtension;
-        certInfo.rgExtension = devCert->pCertInfo->rgExtension;
-        for (UINT32 n = 0; n < certInfo.cExtension; n++)
-        {
-            if (!strcmp(certInfo.rgExtension[n].pszObjId, szOID_AUTHORITY_KEY_IDENTIFIER))
-            {
-                // Find the authority's key identifier
-                std::vector<BYTE> authorityKeyId;
-                CERT_AUTHORITY_KEY_ID_INFO keyIdInfo = { 0 };
-                keyIdInfo.CertSerialNumber.cbData = deviceAuthCert->pCertInfo->SerialNumber.cbData;
-                keyIdInfo.CertSerialNumber.pbData = deviceAuthCert->pCertInfo->SerialNumber.pbData;
-                keyIdInfo.CertIssuer.cbData = deviceAuthCert->pCertInfo->Issuer.cbData;
-                keyIdInfo.CertIssuer.pbData = deviceAuthCert->pCertInfo->Issuer.pbData;
+        std::vector<BYTE> newCert = IssueDeviceCertificate(rawCert, deviceAuthCert, dwKeySpec, deviceAuth);
+        //if ((devCert = CertCreateCertificateContext(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, rawCert.data(), rawCert.size())) == NULL)
+        //{
+        //    throw retVal;
+        //}
+        //if (!CryptImportPublicKeyInfoEx2(X509_ASN_ENCODING, &devCert->pCertInfo->SubjectPublicKeyInfo, 0, NULL, &devPub))
+        //{
+        //    throw DICE_INVALID_PARAMETER;
+        //}
+        //DWORD validityFlags = CERT_STORE_SIGNATURE_FLAG | CERT_STORE_TIME_VALIDITY_FLAG;
+        //if (!CertVerifySubjectCertificateContext(devCert, devCert, &validityFlags))
+        //{
+        //    throw DICE_INVALID_PARAMETER;
+        //}
 
-                for (UINT32 m = 0; m < deviceAuthCert->pCertInfo->cExtension; m++)
-                {
-                    if (!strcmp(deviceAuthCert->pCertInfo->rgExtension[m].pszObjId, szOID_SUBJECT_KEY_IDENTIFIER))
-                    {
-                        CRYPT_DIGEST_BLOB keyId = {0};
-                        DWORD keyidSize = sizeof(keyId);
-                        if (!CryptDecodeObject(X509_ASN_ENCODING,
-                                               deviceAuthCert->pCertInfo->rgExtension[m].pszObjId,
-                                               deviceAuthCert->pCertInfo->rgExtension[m].Value.pbData,
-                                               deviceAuthCert->pCertInfo->rgExtension[m].Value.cbData,
-                                               CRYPT_DECODE_NOCOPY_FLAG,
-                                               &keyId, &keyidSize))
-                        {
-                            throw GetLastError();
-                        }
-                        authorityKeyId.resize(keyId.cbData);
-                        keyIdInfo.KeyId.cbData = (UINT32)authorityKeyId.size();
-                        keyIdInfo.KeyId.pbData = authorityKeyId.data();
-                        memcpy(keyIdInfo.KeyId.pbData, keyId.pbData, keyIdInfo.KeyId.cbData);
-                        break;
-                    }
-                }
-                if (!CryptEncodeObjectEx(X509_ASN_ENCODING,
-                    X509_AUTHORITY_KEY_ID,
-                    &keyIdInfo,
-                    CRYPT_ENCODE_ALLOC_FLAG,
-                    NULL,
-                    &certInfo.rgExtension[n].Value.pbData,
-                    &certInfo.rgExtension[n].Value.cbData))
-                {
-                    throw GetLastError();
-                }
-                break;
-            }
-        }
+        //// Create the new device certificate to issue
+        //CERT_INFO certInfo = { 0 };
+        //certInfo.dwVersion = CERT_V3;
+        //certInfo.SerialNumber.cbData = 16;
+        //std::vector<BYTE> certSerial(certInfo.SerialNumber.cbData, 0);
+        //certInfo.SerialNumber.pbData = certSerial.data();
+        //if((retVal = BCryptGenRandom(hRng, certSerial.data(), certSerial.size(), 0)) != 0)
+        //{
+        //    throw retVal;
+        //}
+        //certInfo.SignatureAlgorithm.pszObjId = szOID_ECDSA_SHA256;
+        //certInfo.Issuer.cbData = deviceAuthCert->pCertInfo->Issuer.cbData;
+        //certInfo.Issuer.pbData = deviceAuthCert->pCertInfo->Issuer.pbData;
+        //certInfo.Subject.cbData = devCert->pCertInfo->Subject.cbData;
+        //certInfo.Subject.pbData = devCert->pCertInfo->Subject.pbData;
+        //SYSTEMTIME systemTime;
+        //GetSystemTime(&systemTime);
+        //SystemTimeToFileTime(&systemTime, &certInfo.NotBefore);
+        //systemTime.wYear += 20;
+        //SystemTimeToFileTime(&systemTime, &certInfo.NotAfter);
+        //certInfo.SubjectPublicKeyInfo = devCert->pCertInfo->SubjectPublicKeyInfo;
+        //certInfo.cExtension = devCert->pCertInfo->cExtension;
+        //certInfo.rgExtension = devCert->pCertInfo->rgExtension;
+        //for (UINT32 n = 0; n < certInfo.cExtension; n++)
+        //{
+        //    if (!strcmp(certInfo.rgExtension[n].pszObjId, szOID_AUTHORITY_KEY_IDENTIFIER))
+        //    {
+        //        // Find the authority's key identifier
+        //        std::vector<BYTE> authorityKeyId;
+        //        CERT_AUTHORITY_KEY_ID_INFO keyIdInfo = { 0 };
+        //        keyIdInfo.CertSerialNumber.cbData = deviceAuthCert->pCertInfo->SerialNumber.cbData;
+        //        keyIdInfo.CertSerialNumber.pbData = deviceAuthCert->pCertInfo->SerialNumber.pbData;
+        //        keyIdInfo.CertIssuer.cbData = deviceAuthCert->pCertInfo->Issuer.cbData;
+        //        keyIdInfo.CertIssuer.pbData = deviceAuthCert->pCertInfo->Issuer.pbData;
 
-        // Issue the new certificate
-        result = 0;
-        CRYPT_ALGORITHM_IDENTIFIER certAlgId = { szOID_ECDSA_SHA256,{ 0, NULL } };
-        if (!CryptSignAndEncodeCertificate(deviceAuth,
-            dwKeySpec,
-            X509_ASN_ENCODING,
-            X509_CERT_TO_BE_SIGNED,
-            &certInfo,
-            &certAlgId,
-            NULL,
-            NULL,
-            &result))
-        {
-            throw GetLastError();
-        }
-        std::vector<BYTE> newCert(result, 0);
-        if (!CryptSignAndEncodeCertificate(deviceAuth,
-            dwKeySpec,
-            X509_ASN_ENCODING,
-            X509_CERT_TO_BE_SIGNED,
-            &certInfo,
-            &certAlgId,
-            NULL,
-            newCert.data(),
-            &result))
-        {
-            throw GetLastError();
-        }
+        //        for (UINT32 m = 0; m < deviceAuthCert->pCertInfo->cExtension; m++)
+        //        {
+        //            if (!strcmp(deviceAuthCert->pCertInfo->rgExtension[m].pszObjId, szOID_SUBJECT_KEY_IDENTIFIER))
+        //            {
+        //                CRYPT_DIGEST_BLOB keyId = {0};
+        //                DWORD keyidSize = sizeof(keyId);
+        //                if (!CryptDecodeObject(X509_ASN_ENCODING,
+        //                                       deviceAuthCert->pCertInfo->rgExtension[m].pszObjId,
+        //                                       deviceAuthCert->pCertInfo->rgExtension[m].Value.pbData,
+        //                                       deviceAuthCert->pCertInfo->rgExtension[m].Value.cbData,
+        //                                       CRYPT_DECODE_NOCOPY_FLAG,
+        //                                       &keyId, &keyidSize))
+        //                {
+        //                    throw GetLastError();
+        //                }
+        //                authorityKeyId.resize(keyId.cbData);
+        //                keyIdInfo.KeyId.cbData = (UINT32)authorityKeyId.size();
+        //                keyIdInfo.KeyId.pbData = authorityKeyId.data();
+        //                memcpy(keyIdInfo.KeyId.pbData, keyId.pbData, keyIdInfo.KeyId.cbData);
+        //                break;
+        //            }
+        //        }
+        //        if (!CryptEncodeObjectEx(X509_ASN_ENCODING,
+        //            X509_AUTHORITY_KEY_ID,
+        //            &keyIdInfo,
+        //            CRYPT_ENCODE_ALLOC_FLAG,
+        //            NULL,
+        //            &certInfo.rgExtension[n].Value.pbData,
+        //            &certInfo.rgExtension[n].Value.cbData))
+        //        {
+        //            throw GetLastError();
+        //        }
+        //        break;
+        //    }
+        //}
+
+        //// Issue the new certificate
+        //result = 0;
+        //CRYPT_ALGORITHM_IDENTIFIER certAlgId = { szOID_ECDSA_SHA256,{ 0, NULL } };
+        //if (!CryptSignAndEncodeCertificate(deviceAuth,
+        //    dwKeySpec,
+        //    X509_ASN_ENCODING,
+        //    X509_CERT_TO_BE_SIGNED,
+        //    &certInfo,
+        //    &certAlgId,
+        //    NULL,
+        //    NULL,
+        //    &result))
+        //{
+        //    throw GetLastError();
+        //}
+        //std::vector<BYTE> newCert(result, 0);
+        //if (!CryptSignAndEncodeCertificate(deviceAuth,
+        //    dwKeySpec,
+        //    X509_ASN_ENCODING,
+        //    X509_CERT_TO_BE_SIGNED,
+        //    &certInfo,
+        //    &certAlgId,
+        //    NULL,
+        //    newCert.data(),
+        //    &result))
+        //{
+        //    throw GetLastError();
+        //}
 
         // Store a copy of the new cert on the disk
         fileName = fileName.substr(0, fileName.size() - 4) + std::wstring(L"-Auth") + fileName.substr(dfuFileName.size() - 4);
@@ -855,94 +1009,168 @@ void CreateDiceApplication(
 //
 //    status = BCryptVerifySignature(hKey.get(), NULL, hash.data(), hash.size(), signature.data(), signature.size(), 0);
 //}
-//
-//void GenerateCertSample()
-//{
-//    ecc_privatekey devPrv = {0};
-//    ecc_publickey devPub = {0};
-//    ecc_privatekey comPrv = {0};
-//    ecc_publickey comPub = {0};
-//
-//    Dice_GenerateDSAKeyPair(&devPub, &devPrv);
-//    Dice_GenerateDSAKeyPair(&comPub, &comPrv);
-//
-//    std::vector<byte> pemBuffer1(DER_MAX_PEM, 0);
-//    {
-//        DICE_X509_TBS_DATA x509DeviceCertData = { { { 0 },
-//            "DICECore", "MSFT", "US",
-//            &devPub, &devPrv
-//            },
-//            1483228800, 2145830400,
-//            { { 0 },
-//            "DICECore", "MSFT", "US",
-//            &devPub, &devPrv
-//            } };
-//        Dice_KDF_SHA256_Seed(x509DeviceCertData.Issuer.CertSerialNum,
-//            sizeof(x509DeviceCertData.Issuer.CertSerialNum),
-//            (const uint8_t*)&devPub,
-//            sizeof(devPub),
-//            NULL,
-//            (const uint8_t*)x509DeviceCertData.Issuer.CommonName,
-//            strlen(x509DeviceCertData.Issuer.CommonName));
-//        x509DeviceCertData.Issuer.CertSerialNum[0] &= 0x7F; // Make sure the serial number is always positive
-//        memcpy(x509DeviceCertData.Subject.CertSerialNum, x509DeviceCertData.Issuer.CertSerialNum, sizeof(x509DeviceCertData.Subject.CertSerialNum));
-//
-//        std::vector<byte> cerBuffer(DER_MAX_TBS, 0);
-//        DERBuilderContext cerCtx = { 0 };
-//        DERInitContext(&cerCtx, cerBuffer.data(), cerBuffer.size());
-//        X509MakeCertBody(&cerCtx, &x509DeviceCertData);
-//        X509MakeDeviceCert(&cerCtx, DICEVERSION, DICETIMESTAMP, 0, NULL);
-//        X509CompleteCert(&cerCtx, &x509DeviceCertData);
-//        pemBuffer1.resize(DERtoPEM(&cerCtx, 0, (char*)pemBuffer1.data(), pemBuffer1.size()));
-//    }
-//    std::vector<byte> pemBuffer2(DER_MAX_PEM, 0);
-//    {
-//        DicePublicInfo_t info = {0};
-//        DiceEmbeddedSignature_t appHdr = { { { DICEMAGIC,
-//            1234,
-//            0x00010003,
-//            1492473712,
-//            "AppName",
-//            { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f },
-//            { 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f }
-//            },
-//            { 0 } } };
-//        DICE_X509_TBS_DATA x509DeviceCertData = { { { 0 },
-//            "DICECore", "MSFT", "US",
-//            &devPub, &devPrv
-//            },
-//            1483228800, 2145830400,
-//            { { 0 },
-//            appHdr.s.sign.name, "OEM", "US",
-//            &comPub, &comPrv
-//            } };
-//        Dice_KDF_SHA256_Seed(x509DeviceCertData.Issuer.CertSerialNum,
-//            sizeof(x509DeviceCertData.Issuer.CertSerialNum),
-//            (const uint8_t*)&devPub,
-//            sizeof(devPub),
-//            NULL,
-//            (const uint8_t*)x509DeviceCertData.Issuer.CommonName,
-//            strlen(x509DeviceCertData.Issuer.CommonName));
-//        x509DeviceCertData.Issuer.CertSerialNum[0] &= 0x7F; // Make sure the serial number is always positive
-//        Dice_KDF_SHA256_Seed(x509DeviceCertData.Subject.CertSerialNum,
-//            sizeof(x509DeviceCertData.Subject.CertSerialNum),
-//            (const uint8_t*)&comPub,
-//            sizeof(comPrv),
-//            NULL,
-//            (const uint8_t*)x509DeviceCertData.Subject.CommonName,
-//            strlen(x509DeviceCertData.Subject.CommonName));
-//        x509DeviceCertData.Subject.CertSerialNum[0] &= 0x7F; // Make sure the serial number is always positive
-//
-//        std::vector<byte> cerBuffer(DER_MAX_TBS, 0);
-//        DERBuilderContext cerCtx = { 0 };
-//        DERInitContext(&cerCtx, cerBuffer.data(), cerBuffer.size());
-//        X509MakeCertBody(&cerCtx, &x509DeviceCertData);
-//        X509MakeCompoundCert(&cerCtx, &info, &appHdr);
-//        X509CompleteCert(&cerCtx, &x509DeviceCertData);
-//        pemBuffer2.resize(DERtoPEM(&cerCtx, 0, (char*)pemBuffer2.data(), pemBuffer2.size()));
-//    }
-//    printf("%s%s\n", pemBuffer1.data(), pemBuffer2.data());
-//}
+
+void GenerateCertSample(
+    std::wstring fileName,
+    PCCERT_CONTEXT deviceAuthCert,
+    DWORD dwKeySpec,
+    HCRYPTPROV_OR_NCRYPT_KEY_HANDLE deviceAuth
+)
+{
+    DWORD retVal = STDFUFILES_NOERROR;
+    BCRYPT_ALG_HANDLE hRng = NULL;
+    ecc_privatekey devPrv = {0};
+    ecc_publickey devPub = {0};
+    ecc_privatekey comPrv = {0};
+    ecc_publickey comPub = {0};
+    bigval_t srcVal = {0};
+    char deviceLabel[] = "DeviceKey";
+    char compoundLabel[] = "CompoundKey";
+
+    if ((retVal = BCryptOpenAlgorithmProvider(&hRng, BCRYPT_RNG_ALGORITHM, NULL, 0)) != 0)
+    {
+        throw retVal;
+    }
+    if ((retVal = BCryptGenRandom(hRng, (uint8_t*)srcVal.data, 32, 0)) != 0)
+    {
+        throw retVal;
+    }
+    BCryptCloseAlgorithmProvider(hRng, 0);
+    Dice_DeriveDsaKeyPair(&devPub, &devPrv, &srcVal, (const uint8_t*)deviceLabel, sizeof(deviceLabel) - 1);
+    Dice_DeriveDsaKeyPair(&comPub, &comPrv, &srcVal, (const uint8_t*)compoundLabel, sizeof(compoundLabel) - 1);
+
+    std::vector<byte> pemBuffer1(DER_MAX_PEM, 0);
+    {
+        DICE_X509_TBS_DATA x509DeviceCertData = { { { 0 },
+            "DICECore", "MSFT", "US",
+            &devPub, &devPrv
+            },
+            0, 0,
+            { { 0 },
+            "DICECore", "MSFT", "US",
+            &devPub, &devPrv
+            } };
+        Dice_KDF_SHA256_Seed(x509DeviceCertData.Issuer.CertSerialNum,
+            sizeof(x509DeviceCertData.Issuer.CertSerialNum),
+            (const uint8_t*)&devPub,
+            sizeof(devPub),
+            NULL,
+            (const uint8_t*)x509DeviceCertData.Issuer.CommonName,
+            strlen(x509DeviceCertData.Issuer.CommonName));
+        x509DeviceCertData.Issuer.CertSerialNum[0] &= 0x7F; // Make sure the serial number is always positive
+        memcpy(x509DeviceCertData.Subject.CertSerialNum, x509DeviceCertData.Issuer.CertSerialNum, sizeof(x509DeviceCertData.Subject.CertSerialNum));
+        x509DeviceCertData.ValidFrom = GetTimeStamp();
+        x509DeviceCertData.ValidTo = GetTimeStamp() + 60 * 60 * 24 * 365; // Plus one year
+
+        std::vector<byte> cerBuffer(DER_MAX_TBS, 0);
+        DERBuilderContext cerCtx = { 0 };
+        DERInitContext(&cerCtx, cerBuffer.data(), cerBuffer.size());
+        X509MakeCertBody(&cerCtx, &x509DeviceCertData);
+        X509MakeDeviceCert(&cerCtx, DICEVERSION, DICETIMESTAMP, 0, NULL);
+        X509CompleteCert(&cerCtx, &x509DeviceCertData);
+
+        cerBuffer.resize(cerCtx.Position);
+        cerBuffer = IssueDeviceCertificate(cerBuffer, deviceAuthCert, dwKeySpec, deviceAuth);
+        cerCtx.Buffer = cerBuffer.data();
+        cerCtx.Length = cerBuffer.size();
+        cerCtx.Position = cerBuffer.size();
+
+        pemBuffer1.resize(DERtoPEM(&cerCtx, 0, (char*)pemBuffer1.data(), pemBuffer1.size()));
+    }
+
+    std::vector<byte> pemBuffer2(DER_MAX_PEM, 0);
+    {
+        DicePublicInfo_t info = {0};
+        DiceEmbeddedSignature_t appHdr = { { { DICEMAGIC,
+            1234,
+            0x00010003,
+            0,
+            "AppName",
+            { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f },
+            { 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f }
+            },
+            { 0 } } };
+        DICE_X509_TBS_DATA x509DeviceCertData = { { { 0 },
+            "DICECore", "MSFT", "US",
+            &devPub, &devPrv
+            },
+            0, 0,
+            { { 0 },
+            appHdr.s.sign.name, "OEM", "US",
+            &comPub, &comPrv
+            } };
+        Dice_KDF_SHA256_Seed(x509DeviceCertData.Issuer.CertSerialNum,
+            sizeof(x509DeviceCertData.Issuer.CertSerialNum),
+            (const uint8_t*)&devPub,
+            sizeof(devPub),
+            NULL,
+            (const uint8_t*)x509DeviceCertData.Issuer.CommonName,
+            strlen(x509DeviceCertData.Issuer.CommonName));
+        x509DeviceCertData.Issuer.CertSerialNum[0] &= 0x7F; // Make sure the serial number is always positive
+        Dice_KDF_SHA256_Seed(x509DeviceCertData.Subject.CertSerialNum,
+            sizeof(x509DeviceCertData.Subject.CertSerialNum),
+            (const uint8_t*)&comPub,
+            sizeof(comPrv),
+            NULL,
+            (const uint8_t*)x509DeviceCertData.Subject.CommonName,
+            strlen(x509DeviceCertData.Subject.CommonName));
+        x509DeviceCertData.Subject.CertSerialNum[0] &= 0x7F; // Make sure the serial number is always positive
+        appHdr.s.sign.issueDate = GetTimeStamp();
+        x509DeviceCertData.ValidFrom = GetTimeStamp();
+        x509DeviceCertData.ValidTo = GetTimeStamp() + 60 * 60 * 24 * 365; // Plus one year
+
+        std::vector<byte> cerBuffer(DER_MAX_TBS, 0);
+        DERBuilderContext cerCtx = { 0 };
+        DERInitContext(&cerCtx, cerBuffer.data(), cerBuffer.size());
+        X509MakeCertBody(&cerCtx, &x509DeviceCertData);
+        X509MakeCompoundCert(&cerCtx, &info, &appHdr);
+        X509CompleteCert(&cerCtx, &x509DeviceCertData);
+        pemBuffer2.resize(DERtoPEM(&cerCtx, 0, (char*)pemBuffer2.data(), pemBuffer2.size()));
+    }
+
+    std::vector<byte> pemBuffer3(DER_MAX_PEM, 0);
+    {
+        std::vector<byte> cerBuffer(DER_MAX_TBS, 0);
+        DERBuilderContext cerCtx = { 0 };
+        DERInitContext(&cerCtx, cerBuffer.data(), cerBuffer.size());
+        DERGetEccPrv(&cerCtx, &comPub, &comPrv);
+        pemBuffer3.resize(DERtoPEM(&cerCtx, 2, (char*)pemBuffer3.data(), pemBuffer3.size()));
+    }
+
+    DWORD result;
+    if (!CryptBinaryToStringA(deviceAuthCert->pbCertEncoded, deviceAuthCert->cbCertEncoded, CRYPT_STRING_BASE64HEADER, NULL, &result))
+    {
+        throw GetLastError();
+    }
+    std::string pemRoot(result, '\0');
+    if (!CryptBinaryToStringA(deviceAuthCert->pbCertEncoded, deviceAuthCert->cbCertEncoded, CRYPT_STRING_BASE64HEADER, (LPSTR)pemRoot.c_str(), &result))
+    {
+        throw GetLastError();
+    }
+    pemRoot.resize(pemRoot.size() - 1);
+
+    std::string pemChain(pemBuffer2.data(), &pemBuffer2.data()[pemBuffer2.size() - 1]);
+    pemChain.append("\n");
+    pemChain += std::string(pemBuffer1.data(), &pemBuffer1.data()[pemBuffer1.size() - 1]);
+    pemChain.append("\n");
+    pemChain += pemRoot;
+    pemChain += std::string(pemBuffer3.data(), &pemBuffer3.data()[pemBuffer3.size() - 1]);
+    pemChain.append("\n\0");
+
+    std::vector<BYTE> pubX(32, 0);
+    BigValToBigInt(pubX.data(), &comPub.x);
+    PrintHexC(std::wstring(L"qx"), pubX);
+    std::vector<BYTE> pubY(32, 0);
+    BigValToBigInt(pubY.data(), &comPub.y);
+    PrintHexC(std::wstring(L"qy"), pubY);
+    std::vector<BYTE> prv(32, 0);
+    BigValToBigInt(prv.data(), &comPrv);
+    PrintHexC(std::wstring(L"d"), prv);
+
+    printf("%s", pemChain.c_str());
+
+    WriteToFile(fileName, std::vector<BYTE>(pemChain.c_str(), &pemChain.c_str()[pemChain.size() - 2]));
+}
 
 void RunSIP(std::unordered_map<std::wstring, std::wstring> param)
 {
@@ -1201,6 +1429,100 @@ void RunCAP(std::unordered_map<std::wstring, std::wstring> param)
     }
 }
 
+void RunSSC(std::unordered_map<std::wstring, std::wstring> param)
+{
+    std::exception_ptr pendingException = NULL;
+    std::unordered_map<std::wstring, std::wstring>::iterator it;
+    std::wstring fileName(param.find(L"00")->second);
+    HCERTSTORE hStore = NULL;
+    PCCERT_CONTEXT hDevAuthCert = NULL;
+    PCCERT_CONTEXT hCert = NULL;
+    DWORD dwKeySpec;
+    BOOL pfCallerFreeProvOrCryptKey;
+    HCRYPTPROV_OR_NCRYPT_KEY_HANDLE deviceAuth = NULL;
+    BCRYPT_KEY_HANDLE codeAuth = NULL;
+    BOOL noClear = false;
+    UINT32 rollBack = -1;
+
+    try
+    {
+        std::vector<BYTE> certThumbPrint;
+        if ((it = param.find(L"-at")) != param.end())
+        {
+            // Get NCrypt Handle to certificate private key pointed to by CertThumbPrint
+            certThumbPrint = ReadHex(it->second);
+        }
+        else if ((it = param.find(L"-af")) != param.end())
+        {
+            // Get NCrypt Handle to certificate private key pointed to by Certificate file
+            PCCERT_CONTEXT hCert = CertFromFile(it->second);
+            certThumbPrint = CertThumbPrint(hCert);
+            CertFreeCertificateContext(hCert);
+        }
+        else
+        {
+            throw DICE_INVALID_PARAMETER;
+        }
+        CRYPT_HASH_BLOB findTP = { certThumbPrint.size(), certThumbPrint.data() };
+        if ((hStore = CertOpenSystemStore(NULL, L"MY")) == NULL)
+        {
+            throw DICE_INVALID_PARAMETER;
+        }
+        if ((hDevAuthCert = CertFindCertificateInStore(hStore, X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, 0, CERT_FIND_HASH, &findTP, NULL)) == NULL)
+        {
+            throw DICE_INVALID_PARAMETER;
+        }
+        if (!CryptAcquireCertificatePrivateKey(hDevAuthCert, CRYPT_ACQUIRE_SILENT_FLAG | CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG, NULL, &deviceAuth, &dwKeySpec, &pfCallerFreeProvOrCryptKey))
+        {
+            throw DICE_INVALID_PARAMETER;
+        }
+
+        GenerateCertSample(fileName, hDevAuthCert, dwKeySpec, deviceAuth);
+    }
+
+    catch (const std::exception& e)
+    {
+        pendingException = std::current_exception();
+    }
+
+    if (hStore)
+    {
+        CertCloseStore(hStore, 0);
+    }
+
+    if (hCert)
+    {
+        CertFreeCertificateContext(hCert);
+    }
+
+    if (hDevAuthCert)
+    {
+        CertFreeCertificateContext(hDevAuthCert);
+    }
+
+    if (codeAuth)
+    {
+        BCryptDestroyKey(codeAuth);
+    }
+
+    if ((deviceAuth) && (pfCallerFreeProvOrCryptKey))
+    {
+        if (dwKeySpec == CERT_NCRYPT_KEY_SPEC)
+        {
+            NCryptFreeObject(deviceAuth);
+        }
+        else
+        {
+            CryptReleaseContext(deviceAuth, 0);
+        }
+    }
+
+    if (pendingException != NULL)
+    {
+        std::rethrow_exception(pendingException);
+    }
+}
+
 // Debug parameter:
 // SIP diceID.dfu -at=9252851cf0e10901d5538f2fb92adb5ef47b7fb0 -ct=9d0d05f53c5ea8260264c584862ee2de56eaf974 -noClear
 // ECP diceID2.dfu
@@ -1212,6 +1534,7 @@ void PrintHelp(void)
     wprintf(L"Sign DeviceID Package:\nSIP [dfuFileName] [-at=DevAuthCertTP | -af=DevAuthCertFile] { -ct=CodeAuthCertTP | -cf=CodeAuthCertFile | -noClear | -rollBack=0 }\n");
     wprintf(L"Export Certificate Package:\nECP [dfuFileName]\n");
     wprintf(L"Create APP Package:\nCAP [hexFileName] { -ct=CodeAuthCertTP | -cf=CodeAuthCertFile | -d=alternateDigest | -version=0 | -timeStamp=0 }\n");
+    wprintf(L"Generate Sample Cert Chain:\nSCC [Name] [-at=DevAuthCertTP | -af=DevAuthCertFile]");
 }
 
 int wmain(int argc, const wchar_t** argv)
@@ -1260,6 +1583,10 @@ int wmain(int argc, const wchar_t** argv)
         else if ((cmd == std::wstring(L"cap")) && (param.size() >= 1))
         {
             RunCAP(param);
+        }
+        else if ((cmd == std::wstring(L"ssc")) && (param.size() >= 1))
+        {
+            RunSSC(param);
         }
         else
         {

@@ -135,7 +135,7 @@ int main(void)
 
   /* USER CODE BEGIN 2 */
     EPRINTF("==========================\r\n");
-    EPRINTF("    DICE APP: Payload! \r\n");
+    EPRINTF("    DICE APP: Payload!\r\n");
     EPRINTF("==========================\r\n");
     EPRINTF("DICE Certificate Bag(%d):\r\n%s\r\n", DICERAMAREA->info.certBagLen, DICERAMAREA->info.certBag);
   /* USER CODE END 2 */

@@ -625,6 +625,35 @@ Error:
 }
 
 int
+DERGetEccPrv(
+    DERBuilderContext   *Context,
+    ecc_publickey       *Pub,
+    ecc_privatekey      *Prv
+)
+{
+    uint8_t     encBuffer[65];
+    uint32_t    encBufferLen;
+
+    CHK(DERStartSequenceOrSet(Context, true));
+    CHK(    DERAddInteger(Context, 1));
+            encBufferLen = BigValToBigInt(encBuffer, Prv);
+    CHK(    DERAddOctetString(Context, encBuffer, encBufferLen))
+    CHK(    DERStartExplicit(Context, 0));
+    CHK(        DERAddOID(Context, prime256v1OID));
+    CHK(    DERPopNesting(Context));
+            DERExportEccPub(Pub, encBuffer, &encBufferLen);
+    CHK(    DERStartExplicit(Context, 1));
+    CHK(        DERAddBitString(Context, encBuffer, encBufferLen * 8));
+    CHK(    DERPopNesting(Context));
+    CHK(DERPopNesting(Context));
+
+    return 0;
+
+Error:
+    return -1;
+}
+
+int
 DERGetNestingDepth(
     DERBuilderContext   *Context
 )

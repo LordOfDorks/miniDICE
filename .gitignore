@@ -1,3 +1,6 @@
+*.cer
+*.p7b
+*.pem
 *.exe
 *.vc.db
 *.suo

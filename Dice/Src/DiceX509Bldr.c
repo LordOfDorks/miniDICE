@@ -293,4 +293,3 @@ X509MakeCompoundCert(
 Error:
     return -1;
 }
-

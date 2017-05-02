@@ -197,6 +197,13 @@ DERGetEccPub(
 );
 
 int
+DERGetEccPrv(
+    DERBuilderContext   *Context,
+    ecc_publickey       *Pub,
+    ecc_privatekey      *Prv
+);
+
+int
 DERTbsToCert(
     DERBuilderContext   *Context
 );
