@@ -214,6 +214,7 @@ std::vector<BYTE> IssueDeviceCertificate(
     {
         throw retVal;
     }
+    certSerial[0] &= 0x7f;  // Make sure the serial number is always positive
     certInfo.SignatureAlgorithm.pszObjId = szOID_ECDSA_SHA256;
     certInfo.Issuer.cbData = deviceAuthCert->pCertInfo->Issuer.cbData;
     certInfo.Issuer.pbData = deviceAuthCert->pCertInfo->Issuer.pbData;
