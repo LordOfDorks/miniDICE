@@ -1534,7 +1534,7 @@ void PrintHelp(void)
     wprintf(L"Sign DeviceID Package:\nSIP [dfuFileName] [-at=DevAuthCertTP | -af=DevAuthCertFile] { -ct=CodeAuthCertTP | -cf=CodeAuthCertFile | -noClear | -rollBack=0 }\n");
     wprintf(L"Export Certificate Package:\nECP [dfuFileName]\n");
     wprintf(L"Create APP Package:\nCAP [hexFileName] { -ct=CodeAuthCertTP | -cf=CodeAuthCertFile | -d=alternateDigest | -version=0 | -timeStamp=0 }\n");
-    wprintf(L"Generate Sample Cert Chain:\nSCC [Name] [-at=DevAuthCertTP | -af=DevAuthCertFile]");
+    wprintf(L"Generate Sample Cert Chain:\nSSC [Name] [-at=DevAuthCertTP | -af=DevAuthCertFile]");
 }
 
 int wmain(int argc, const wchar_t** argv)

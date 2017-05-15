@@ -168,6 +168,8 @@ X509MakeDeviceCert(
     ecc_publickey       *AppAuthorityPub
 )
 {
+    uint8_t keyUsage = 0x43; //digitalSignature, keyCertSign, cRLSign
+
     CHK(            DERStartSequenceOrSet(Tbs, true));
     CHK(                DERAddOID(Tbs, basicConstraintsOID));
     CHK(                DERAddBoolean(Tbs, true));
@@ -176,6 +178,13 @@ X509MakeDeviceCert(
     CHK(                        DERAddBoolean(Tbs, true));
     CHK(                        DERAddInteger(Tbs, 1));
     CHK(                    DERPopNesting(Tbs));
+    CHK(                DERPopNesting(Tbs));
+    CHK(            DERPopNesting(Tbs));
+    CHK(            DERStartSequenceOrSet(Tbs, true));
+    CHK(                DERAddOID(Tbs, keyUsageOID));
+    CHK(                DERAddBoolean(Tbs, true));
+    CHK(                DERStartEnvelopingOctetString(Tbs));
+    CHK(                    DERAddBitString(Tbs, &keyUsage, 7));
     CHK(                DERPopNesting(Tbs));
     CHK(            DERPopNesting(Tbs));
     CHK(            DERStartSequenceOrSet(Tbs, true));
