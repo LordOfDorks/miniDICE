@@ -2,8 +2,8 @@
   ******************************************************************************
   * @file    stm32l0xx_hal_pcd.c
   * @author  MCD Application Team
-  * @version V1.7.0
-  * @date    31-May-2016
+  * @version V1.8.1
+  * @date    14-April-2017
   * @brief   PCD HAL module driver.
   *          This file provides firmware functions to manage the following 
   *          functionalities of the USB Peripheral Controller:
@@ -190,17 +190,28 @@ HAL_StatusTypeDef HAL_PCD_Init(PCD_HandleTypeDef *hpcd)
  
   /*Set Btable Adress*/
  hpcd->Instance->BTABLE = BTABLE_ADDRESS;
-  
-  /*set wInterrupt_Mask global variable*/
-  wInterrupt_Mask = USB_CNTR_CTRM  | USB_CNTR_WKUPM | USB_CNTR_SUSPM | USB_CNTR_ERRM \
-    | USB_CNTR_ESOFM | USB_CNTR_RESETM;
-  
+ 
+ /*set wInterrupt_Mask global variable*/
+ wInterrupt_Mask = USB_CNTR_CTRM  | USB_CNTR_WKUPM | USB_CNTR_SUSPM | USB_CNTR_ERRM \
+   | USB_CNTR_SOFM | USB_CNTR_ESOFM | USB_CNTR_RESETM;
+ 
   /*Set interrupt mask*/
-  hpcd->Instance->CNTR = wInterrupt_Mask;
+ hpcd->Instance->CNTR = wInterrupt_Mask;
+ 
+ hpcd->USB_Address = 0U;
+ hpcd->State= HAL_PCD_STATE_READY;
   
-  hpcd->USB_Address = 0U;
-  hpcd->State= HAL_PCD_STATE_READY;
-
+ /* Activate LPM */
+ if (hpcd->Init.lpm_enable ==1)
+ {
+   HAL_PCDEx_ActivateLPM(hpcd);
+ }  
+ /* Activate Battery charging */
+ if (hpcd->Init.battery_charging_enable ==1)
+ {
+   HAL_PCDEx_ActivateBCD(hpcd);
+  }
+ 
  return HAL_OK;
 }
 
@@ -354,16 +365,30 @@ void HAL_PCD_IRQHandler(PCD_HandleTypeDef *hpcd)
     
     /*set wInterrupt_Mask global variable*/
     wInterrupt_Mask = USB_CNTR_CTRM  | USB_CNTR_WKUPM | USB_CNTR_SUSPM | USB_CNTR_ERRM \
-      | USB_CNTR_ESOFM | USB_CNTR_RESETM;
-    
+      | USB_CNTR_SOFM | USB_CNTR_ESOFM | USB_CNTR_RESETM;
+
     /*Set interrupt mask*/
     hpcd->Instance->CNTR = wInterrupt_Mask;
+
+    /* enable L1REQ interrupt */ 
+    if (hpcd->Init.lpm_enable ==1)
+    {
+      wInterrupt_Mask |= USB_CNTR_L1REQM;
+      
+      /* Enable LPM support and enable ACK answer to LPM request*/
+      USB_TypeDef *USBx = hpcd->Instance;
+      hpcd->lpm_active = ENABLE;
+      hpcd->LPM_State = LPM_L0;
+      
+      USBx->LPMCSR |= (USB_LPMCSR_LMPEN);
+      USBx->LPMCSR |= (USB_LPMCSR_LPMACK);
+    } 
     
     HAL_PCD_ResumeCallback(hpcd);
     
     __HAL_PCD_CLEAR_FLAG(hpcd, USB_ISTR_WKUP);     
   }
-
+  
   if (__HAL_PCD_GET_FLAG (hpcd, USB_ISTR_SUSP))
   {    
     /* clear of the ISTR bit must be done after setting of CNTR_FSUSP */
@@ -374,6 +399,26 @@ void HAL_PCD_IRQHandler(PCD_HandleTypeDef *hpcd)
     hpcd->Instance->CNTR |= USB_CNTR_LPMODE;
     
     if (__HAL_PCD_GET_FLAG (hpcd, USB_ISTR_WKUP) == 0U)
+    {
+      HAL_PCD_SuspendCallback(hpcd);
+    }
+  }
+  
+    /* Handle LPM Interrupt */ 
+  if(__HAL_PCD_GET_FLAG(hpcd, USB_ISTR_L1REQ))
+  {
+    __HAL_PCD_CLEAR_FLAG(hpcd, USB_ISTR_L1REQ);      
+    if( hpcd->LPM_State == LPM_L0)
+    {   
+      /* Force suspend and low-power mode before going to L1 state*/
+      hpcd->Instance->CNTR |= USB_CNTR_LPMODE;
+      hpcd->Instance->CNTR |= USB_CNTR_FSUSP;
+      
+      hpcd->LPM_State = LPM_L1;
+      hpcd->BESL = (hpcd->Instance->LPMCSR & USB_LPMCSR_BESL) >>2 ;  
+      HAL_PCDEx_LPM_Callback(hpcd, PCD_LPM_L1_ACTIVE);
+    }
+    else
     {
       HAL_PCD_SuspendCallback(hpcd);
     }
@@ -1050,11 +1095,20 @@ HAL_StatusTypeDef HAL_PCD_EP_Flush(PCD_HandleTypeDef *hpcd, uint8_t ep_addr)
   * @brief  HAL_PCD_ActivateRemoteWakeup : active remote wakeup signalling
   * @param  hpcd: PCD handle
   * @retval status
-  */
+*/
 HAL_StatusTypeDef HAL_PCD_ActivateRemoteWakeup(PCD_HandleTypeDef *hpcd)
 {
-  hpcd->Instance->CNTR |= USB_CNTR_RESUME;
-  return HAL_OK;  
+  if (hpcd->Init.lpm_enable ==1)
+  {
+    /* Apply L1 Resume */
+    hpcd->Instance->CNTR |= USB_CNTR_L1RESUME;
+  }
+  else
+  {
+    /* Apply L2 Resume */
+    hpcd->Instance->CNTR |= USB_CNTR_RESUME;
+  }
+  return (HAL_OK);
 }
 
 /**
@@ -1064,10 +1118,18 @@ HAL_StatusTypeDef HAL_PCD_ActivateRemoteWakeup(PCD_HandleTypeDef *hpcd)
   */
 HAL_StatusTypeDef HAL_PCD_DeActivateRemoteWakeup(PCD_HandleTypeDef *hpcd)
 {
-  hpcd->Instance->CNTR &= ((uint16_t) ~(USB_CNTR_RESUME));
-  return HAL_OK;  
+  if (hpcd->Init.lpm_enable ==1)
+  {
+    /* Release L1 Resume */
+    hpcd->Instance->CNTR &= ~ USB_CNTR_L1RESUME;
+  }
+  else
+  {
+    /* Release L2 Resume */
+    hpcd->Instance->CNTR &= ~ USB_CNTR_RESUME;
+  }
+  return (HAL_OK);
 }
-
 
 /**
   * @}

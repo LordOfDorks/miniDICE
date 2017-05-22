@@ -13,9 +13,9 @@
 //#define DICEPROVISIONEDID           (0x44494345) //'ECID'
 //#define DICEMARKER                  (0x4B52414D45434944)
 #ifndef SILENTDICE
-#define DICEBOOTLOADERSIZE          (0x0000B000)
+#define DICEBOOTLOADERSIZE          (0x00010000)
 #else
-#define DICEBOOTLOADERSIZE          (0x00005400)
+#define DICEBOOTLOADERSIZE          (0x00009400)
 #endif
 #define DICEDATAEEPROMSTART         (0x08080000)
 #define DICEDATAEEPROMSIZE          (0x00001800)
@@ -45,7 +45,7 @@
 #define DICEBLINKEARLYDFU           (4)
 
 #ifndef SILENTDICE
-#define EPRINTF(...) fprintf(&__stderr, __VA_ARGS__)
+#define EPRINTF(...) fprintf(stderr, __VA_ARGS__)
 #define EPRINTFHEXSTRING(__p, __l) for(uint32_t n = 0; n < (__l); n++) EPRINTF("%02x", ((uint8_t*)(__p))[n]);
 #define EPRINTFBYTESTRING(__p, __l) for(uint32_t n = 0; n < (__l); n++) EPRINTF("%02x ", ((uint8_t*)(__p))[n]);
 #else

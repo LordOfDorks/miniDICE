@@ -88,36 +88,36 @@ void DicePrintInfo(void)
     {
         EPRINTF("\r\nProperties:         %s", (DICERAMAREA->info.properties.noClear) ? "noClear " : "");
     }
-    EPRINTF("\r\nProtectedFLASH:     0x%04x@0x%08x", DICERAMAREA->info.dontTouchSize, DICEDATAEEPROMSTART);
-    EPRINTF("\r\nOccupiedRAM:        0x%04x@0x%08x", sizeof(DiceData_t) - 1 + DICERAMAREA->info.certBagLen, DICERAMSTART);
+    EPRINTF("\r\nProtectedFLASH:     0x%04lx@0x%08lx", DICERAMAREA->info.dontTouchSize, (uint32_t)DICEDATAEEPROMSTART);
+    EPRINTF("\r\nOccupiedRAM:        0x%04lx@0x%08lx", sizeof(DiceData_t) - 1 + DICERAMAREA->info.certBagLen, (uint32_t)DICERAMSTART);
 
     DERInitContext(&cerCtx, num, sizeof(num));
     DERGetEccPub(&cerCtx, &DICERAMAREA->info.devicePub);
     pemSize = DERtoPEM(&cerCtx, 1, pem, sizeof(pem));
-    EPRINTF("\r\nDevicePub(%d):\r\n%s", pemSize, pem);
+    EPRINTF("\r\nDevicePub(%lu):\r\n%s", pemSize, pem);
 
     if(!DiceNullCheck(&DICERAMAREA->info.authorityPub, sizeof(DICERAMAREA->info.authorityPub)))
     {
         DERInitContext(&cerCtx, num, sizeof(num));
         DERGetEccPub(&cerCtx, &DICERAMAREA->info.authorityPub);
         pemSize = DERtoPEM(&cerCtx, 1, pem, sizeof(pem));
-        EPRINTF("AuthorityPub(%d):\r\n%s", pemSize, pem);
+        EPRINTF("AuthorityPub(%lu):\r\n%s", pemSize, pem);
     }
 
     if(DICERAMAREA->info.certBagLen > 0)
     {
-        EPRINTF("CertificateBag(%d):\r\n%s", DICERAMAREA->info.certBagLen, DICERAMAREA->info.certBag);
+        EPRINTF("CertificateBag(%lu):\r\n%s", DICERAMAREA->info.certBagLen, DICERAMAREA->info.certBag);
     }
     EPRINTF("=====END DICE INFORMATION=====\r\n");
 
     if(DICEAPPHDR->s.sign.magic == DICEMAGIC)
     {
         EPRINTF("\r\n=====BEGIN APPLICATION=====");
-        EPRINTF("\r\nAppSize:            %d bytes (0x%08x)", DICEAPPHDR->s.sign.codeSize, DICEAPPHDR->s.sign.codeSize);
-        EPRINTF("\r\nAppVersion:         %d.%d", (DICEAPPHDR->s.sign.version >> 16), (DICEAPPHDR->s.sign.version & 0x0000ffff));
+        EPRINTF("\r\nAppSize:            %lu bytes (0x%08lx)", DICEAPPHDR->s.sign.codeSize, DICEAPPHDR->s.sign.codeSize);
+        EPRINTF("\r\nAppVersion:         %lu.%lu", (DICEAPPHDR->s.sign.version >> 16), (DICEAPPHDR->s.sign.version & 0x0000ffff));
         dateStr = asctime(localtime((time_t*)&DICERAMAREA->info.rollBackProtection));
         dateStr[24] = '\0';
-        EPRINTF("\r\nAppIssuanceDate:    %s (%d)", dateStr, DICEAPPHDR->s.sign.issueDate);
+        EPRINTF("\r\nAppIssuanceDate:    %s (%lu)", dateStr, DICEAPPHDR->s.sign.issueDate);
         EPRINTF("\r\nAppName:            %s", DICEAPPHDR->s.sign.name);
         EPRINTF("\r\nAppDigest:          0x");
         EPRINTFHEXSTRING(DICEAPPHDR->s.sign.appDigest, sizeof(DICEAPPHDR->s.sign.appDigest));
@@ -126,13 +126,13 @@ void DicePrintInfo(void)
         DERInitContext(&cerCtx, num, sizeof(num));
         DERGetEccPub(&cerCtx, &DICERAMAREA->compoundPub);
         pemSize = DERtoPEM(&cerCtx, 1, pem, sizeof(pem));
-        EPRINTF("\r\nCompoundPub(%d):\r\n%s", pemSize, pem);
+        EPRINTF("\r\nCompoundPub(%lu):\r\n%s", pemSize, pem);
         if(!DiceNullCheck(&DICERAMAREA->alternatePub, sizeof(DICERAMAREA->alternatePub)))
         {
             DERInitContext(&cerCtx, num, sizeof(num));
             DERGetEccPub(&cerCtx, &DICERAMAREA->alternatePub);
             pemSize = DERtoPEM(&cerCtx, 1, pem, sizeof(pem));
-            EPRINTF("AlternatePub(%d):\r\n%s", pemSize, pem);
+            EPRINTF("AlternatePub(%lu):\r\n%s", pemSize, pem);
         }
         EPRINTF("=====END APPLICATION=====\r\n");
     }
@@ -140,7 +140,7 @@ void DicePrintInfo(void)
 
 void DicePrintInfoHex(char* varName, void* dataPtr, uint32_t dataSize)
 {
-    EPRINTF("uint8_t %s[%d] = {", varName, dataSize);
+    EPRINTF("uint8_t %s[%lu] = {", varName, dataSize);
     for(uint32_t n = 0; n < dataSize; n++)
     {
         if((n < dataSize) && (n != 0)) EPRINTF(",");

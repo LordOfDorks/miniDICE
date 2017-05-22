@@ -196,7 +196,8 @@ std::vector<BYTE> IssueDeviceCertificate(
     }
     if (!CryptImportPublicKeyInfoEx2(X509_ASN_ENCODING, &devCert->pCertInfo->SubjectPublicKeyInfo, 0, NULL, &devPub))
     {
-        throw DICE_INVALID_PARAMETER;
+        retVal = GetLastError();
+        throw retVal;
     }
     DWORD validityFlags = CERT_STORE_SIGNATURE_FLAG | CERT_STORE_TIME_VALIDITY_FLAG;
     if (!CertVerifySubjectCertificateContext(devCert, devCert, &validityFlags))
@@ -389,6 +390,7 @@ void SignDiceIdentityPackage(
             BCRYPT_ECCKEY_BLOB* keyHdr = (BCRYPT_ECCKEY_BLOB*)codeAuthPub.data();
             BigIntToBigVal(&dicePublic->authorityPub.x, &codeAuthPub[sizeof(BCRYPT_ECCKEY_BLOB)], keyHdr->cbKey);
             BigIntToBigVal(&dicePublic->authorityPub.y, &codeAuthPub[sizeof(BCRYPT_ECCKEY_BLOB) + keyHdr->cbKey], keyHdr->cbKey);
+            dicePublic->authorityPub.infinity = 0;
         }
 
         // Open the selfsigned device certificate and verify it
@@ -753,7 +755,17 @@ void CreateDiceApplication(
         sigHdr->s.sign.codeSize = dfuImageElement.dwDataLength - sizeof(DiceEmbeddedSignature_t);
         sigHdr->s.sign.version = 0x00000000;
         sigHdr->s.sign.issueDate = GetTimeStamp();
-        memcpy(sigHdr->s.sign.name, hexFileName.c_str(), hexFileName.length() - 4);
+        std::string appName;
+        if (hexFileName.find_last_of('\\') == hexFileName.npos)
+        {
+            appName = hexFileName;
+        }
+        else
+        {
+            appName = hexFileName.substr(hexFileName.find_last_of('\\') + 1);
+        }
+        appName[appName.size() - 4] = 0;
+        strncpy_s(sigHdr->s.sign.name, appName.c_str(), sizeof(sigHdr->s.sign.name));
         if ((retVal = BCryptHash(hSha256, NULL, 0, &dfuImageElement.Data[sizeof(DiceEmbeddedSignature_t)], sigHdr->s.sign.codeSize, sigHdr->s.sign.appDigest, sizeof(sigHdr->s.sign.appDigest))) != 0)
         {
             throw retVal;

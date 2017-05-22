@@ -32,13 +32,13 @@ extern "C" {
 // @param contextSize
 // @param numberOfBits the number of bits to be produced
 //
-size_t Dice_KDF_Fixed(
+uint32_t Dice_KDF_Fixed(
     uint8_t         *fixed,
-    size_t          fixedSize,
+    uint32_t          fixedSize,
     const uint8_t   *label,
-    size_t          labelSize,
+    uint32_t          labelSize,
     const uint8_t   *context,
-    size_t          contextSize,
+    uint32_t          contextSize,
     uint32_t        numberOfBits
 );
 
@@ -55,20 +55,20 @@ size_t Dice_KDF_Fixed(
 void Dice_KDF_SHA256(
     uint8_t         *out,
     const uint8_t   *key,
-    size_t          keySize,
+    uint32_t          keySize,
     uint32_t        *counter,
     const uint8_t   *fixed,
-    size_t          fixedSize
+    uint32_t          fixedSize
 );
 
 void Dice_KDF_SHA256_Seed(
     uint8_t         *out,
     uint32_t        outSize,
     const uint8_t   *key,
-    size_t          keySize,
+    uint32_t          keySize,
     uint32_t        *counter,
     const uint8_t   *fixed,
-    size_t          fixedSize
+    uint32_t          fixedSize
 );
 
 #ifdef __cplusplus

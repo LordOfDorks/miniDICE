@@ -103,7 +103,7 @@ extern RNG_HandleTypeDef hrng;
 // It must return 0 on success, and -1 on error.  Feel free to rename
 // this function, if necessary.
 //
-static int get_random_bytes(uint8_t *buf, size_t len);
+static int get_random_bytes(uint8_t *buf, uint32_t len);
 #endif
 
 //
@@ -1630,18 +1630,12 @@ BigIntToBigVal(bigval_t *tgt, void const *in, size_t inSize)
 int
 BigValToBigInt(void *out, const bigval_t *src)
 {
-    int i;
+    int i, n = 0;
     // Start with the most significant word and work down.
     // Initialize i with the number of bytes to move - 1.
     for (i = ((BIGLEN - 1) * 4) - 1; i >= 0; i--) {
-#ifndef WIN32
-#pragma push
-#pragma diag_suppress 1441 // #1441-D: nonstandard cast on lvalue
-#endif
-        *((uint8_t *)out)++ = src->data[i / 4] >> (8 * (i % 4));
-#ifndef WIN32
-#pragma pop
-#endif
+//        *((uint8_t *)out)++ = src->data[i / 4] >> (8 * (i % 4));
+        ((uint8_t *)out)[n++] = src->data[i / 4] >> (8 * (i % 4));
     }
     return ((BIGLEN - 1) * 4);
 }
@@ -1677,7 +1671,7 @@ ECC_feature_list(void)
 #if USES_EPHEMERAL
 #include <stdlib.h>
 static int
-get_random_bytes(uint8_t *buf, size_t len)
+get_random_bytes(uint8_t *buf, uint32_t len)
 {
     // DJM: DICE (time->SOMETHING ELSE (TODO)
     // srand((unsigned)time(NULL));

@@ -4,6 +4,11 @@
   * @version        : v2.0_Cube
   * @brief          : Header for usbd_conf file.
   ******************************************************************************
+  * This notice applies to any and all portions of this file
+  * that are not between comment pairs USER CODE BEGIN and
+  * USER CODE END. Other portions of this file, whether 
+  * inserted by the user or by software development tools
+  * are owned by their respective copyright owners.
   *
   * Copyright (c) 2017 STMicroelectronics International N.V. 
   * All rights reserved.
@@ -86,7 +91,7 @@
 /*---------- -----------*/
 #define USBD_DFU_XFER_SIZE     1024
 /*---------- -----------*/
-#define USBD_DFU_APP_DEFAULT_ADD     0x08008000
+#define USBD_DFU_APP_DEFAULT_ADD     0x08000000
 /****************************************/
 /* #define for FS and HS identification */
 #define DEVICE_FS 		0

@@ -20,10 +20,10 @@ void
 Dice_HMAC_SHA256_Init(
     DICE_HMAC_SHA256_CTX *ctx,
     const uint8_t *key,
-    size_t keyLen
+    uint32_t keyLen
 )
 {
-    size_t cnt;
+    uint32_t cnt;
 
     assert(ctx && key);
 
@@ -67,7 +67,7 @@ void
 Dice_HMAC_SHA256_Update(
     DICE_HMAC_SHA256_CTX *ctx,
     const uint8_t *data,
-    size_t dataLen
+    uint32_t dataLen
 )
 {
     Dice_SHA256_Update(&ctx->hashCtx, data, dataLen);
@@ -93,9 +93,9 @@ Dice_HMAC_SHA256_Final(
 
 void Dice_HMAC_SHA256_Block(
     const uint8_t *key,
-    size_t keyLen,
+    uint32_t keyLen,
     const uint8_t *buf,
-    size_t bufSize,
+    uint32_t bufSize,
     uint8_t *digest
 )
 {

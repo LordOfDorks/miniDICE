@@ -2,6 +2,8 @@
 *.p7b
 *.pem
 *.exe
+*.sdf
+*.enc
 *.vc.db
 *.suo
 *.ipch
@@ -34,3 +36,7 @@ jlinksettings.ini
 *.uvguix.*
 *.iex
 .vs
+miniDICE/Release/*
+miniDICE/Debug/*
+Payload/Release/*
+Payload/Debug/*

@@ -137,6 +137,10 @@ X509CompleteCert(
     CHK(DERPopNesting(Tbs));
 
     Dice_DSASign(Tbs->Buffer, Tbs->Position, TbsData->Issuer.PrvKey, &sig);
+    if(Dice_DSAVerify(Tbs->Buffer, Tbs->Position, &sig, TbsData->Issuer.PubKey) != DICE_SUCCESS)
+    {
+        return -1;
+    }
 
     CHK(DERTbsToCert(Tbs));
     CHK(    DERStartSequenceOrSet(Tbs, true));

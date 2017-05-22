@@ -37,7 +37,7 @@ typedef struct _DICE_HMAC_SHA256_CTX {
 // @param key the key
 // @param keyLen the length of the key
 //
-void Dice_HMAC_SHA256_Init(DICE_HMAC_SHA256_CTX *ctx, const uint8_t *key, size_t keyLen);
+void Dice_HMAC_SHA256_Init(DICE_HMAC_SHA256_CTX *ctx, const uint8_t *key, uint32_t keyLen);
 
 //
 // Update the hash with data
@@ -46,7 +46,7 @@ void Dice_HMAC_SHA256_Init(DICE_HMAC_SHA256_CTX *ctx, const uint8_t *key, size_t
 // @param dataLen the length of the data
 // @return
 //
-void Dice_HMAC_SHA256_Update(DICE_HMAC_SHA256_CTX *ctx, const uint8_t *data, size_t dataLen);
+void Dice_HMAC_SHA256_Update(DICE_HMAC_SHA256_CTX *ctx, const uint8_t *data, uint32_t dataLen);
 
 //
 // Retrieve the final digest for the HMAC
@@ -55,7 +55,7 @@ void Dice_HMAC_SHA256_Update(DICE_HMAC_SHA256_CTX *ctx, const uint8_t *data, siz
 //
 void Dice_HMAC_SHA256_Final(DICE_HMAC_SHA256_CTX *ctx, uint8_t *digest);
 
-void Dice_HMAC_SHA256_Block(const uint8_t *key, size_t keyLen, const uint8_t *buf, size_t bufSize, uint8_t *digest);
+void Dice_HMAC_SHA256_Block(const uint8_t *key, uint32_t keyLen, const uint8_t *buf, uint32_t bufSize, uint8_t *digest);
 
 #ifdef __cplusplus
 }

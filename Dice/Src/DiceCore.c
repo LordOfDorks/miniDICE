@@ -89,7 +89,7 @@ void DiceGenerateDFUString(void)
     for(uint32_t n = DICEBOOTLOADERSIZE; n < DICEFLASHSIZE; n += MIN(99 * 512, DICEFLASHSIZE - n))
     {
         cursor += sprintf(&dfuStr[cursor],
-                "/0x%08x/%02d*512Bf",
+                "/0x%08lx/%02lu*512Bf",
                 (DICEFLASHSTART + n),
                 MIN(99, (DICEFLASHSIZE - n) / 512));
     }
@@ -101,7 +101,7 @@ void DiceGenerateDFUString(void)
         uint32_t writeStart = readWriteStart + readWritePages * 64;
         uint32_t writePages = (DICEDATAEEPROMSTART + DICEDATAEEPROMSIZE - writeStart) /64;
         cursor += sprintf(&dfuStr[cursor],
-                "/0x%08x/%02d*064Bg/0x%08x/%02d*064Bf",
+                "/0x%08lx/%02lu*064Bg/0x%08lx/%02lu*064Bf",
                 readWriteStart,
                 readWritePages,
                 writeStart,
@@ -110,7 +110,7 @@ void DiceGenerateDFUString(void)
     else
     {
         cursor += sprintf(&dfuStr[cursor],
-                "/0x%08x/%02d*064Ba",
+                "/0x%08lx/%02lu*064Ba",
                 (uint32_t)&DICERAMAREA->info,
                 ((sizeof(DicePublicInfo_t) - 1 + DICERAMAREA->info.certBagLen + 63) / 64));
     }
@@ -202,7 +202,8 @@ DICE_STATUS DiceInitialize(void)
         DERBuilderContext cerCtx = {0};
         DERInitContext(&cerCtx, cerBuffer, DER_MAX_TBS);
         X509MakeCertBody(&cerCtx, &x509DeviceCertData);
-        X509MakeDeviceCert(&cerCtx, DICEVERSION, DICETIMESTAMP, *((uint32_t*)&staging->info.properties), NULL);
+        uint32_t* pProperties = (uint32_t*)&staging->info.properties;
+        X509MakeDeviceCert(&cerCtx, DICEVERSION, DICETIMESTAMP, *pProperties, NULL);
         X509CompleteCert(&cerCtx, &x509DeviceCertData);
         staging->info.certBagLen = DERtoPEM(&cerCtx, 0, staging->info.certBag, staging->info.certBagLen);
         
@@ -240,7 +241,7 @@ DICE_STATUS DiceInitialize(void)
     // No code - no boot
     if(DICEAPPHDR->s.sign.magic != DICEMAGIC)
     {
-        EPRINTF("WARNING: The application area is NULL, we go direcrtly to DFU mode!\r\n");
+        EPRINTF("WARNING: The application area is NULL, we go directly to DFU mode!\r\n");
         retVal = DICE_LOAD_MODULE_FAILED;
         goto Cleanup;
     }
@@ -250,7 +251,7 @@ DICE_STATUS DiceInitialize(void)
     Dice_SHA256_Block((uint8_t*)DICEAPPENTRY, DICEAPPHDR->s.sign.codeSize, referenceDigest);
     if(memcmp(DICEAPPHDR->s.sign.appDigest, referenceDigest, SHA256_DIGEST_LENGTH))
     {
-        EPRINTF("WARNING: Application digest does not match with the embedded signature header, we go direcrtly to DFU mode!\r\n");
+        EPRINTF("WARNING: Application digest does not match with the embedded signature header, we go directly to DFU mode!\r\n");
         retVal = DICE_LOAD_MODULE_FAILED;
         goto Cleanup;
     }
@@ -262,7 +263,7 @@ DICE_STATUS DiceInitialize(void)
         {
             EPRINTF("TimeStamp latest issued App: %s\r", asctime(localtime((time_t*)&DICERAMAREA->info.rollBackProtection)));
             EPRINTF("TimeStamp of the installed App:   %s\r", asctime(localtime((time_t*)&DICEAPPHDR->s.sign.issueDate)));
-            EPRINTF("WARNING: Application rollback was detected, we go direcrtly to DFU mode!\r\n");
+            EPRINTF("WARNING: Application rollback was detected, we go directly to DFU mode!\r\n");
             retVal = DICE_LOAD_MODULE_FAILED;
             goto Cleanup;
         }
@@ -283,7 +284,7 @@ DICE_STATUS DiceInitialize(void)
         // Verify the App header signature
         if((retVal = Dice_DSAVerify((uint8_t*)&DICEAPPHDR->s.sign, sizeof(DICEAPPHDR->s.sign), &DICEAPPHDR->s.signature, &DICERAMAREA->info.authorityPub)) != DICE_SUCCESS)
         {
-            EPRINTF("WARNING: Authority signature verification of App signature failed, we go direcrtly to DFU mode!\r\n");
+            EPRINTF("WARNING: Authority signature verification of App signature failed, we go directly to DFU mode!\r\n");
             retVal = DICE_LOAD_MODULE_FAILED;
             goto Cleanup;
         }

@@ -354,7 +354,7 @@ static int8_t CDC_Control_FS  (uint8_t cmd, uint8_t* pbuf, uint16_t length)
       LineCoding.format = pbuf[4];
       LineCoding.paritytype = pbuf[5];
       LineCoding.datatype = pbuf[6];
-      fprintf(&__stderr, "CDC_SET_LINE_CODING: %d-%d%c%d\r\n", LineCoding.bitrate, LineCoding.datatype, parity[LineCoding.paritytype], stop[LineCoding.format]);
+      fprintf(stderr, "CDC_SET_LINE_CODING: %lu-%d%c%d\r\n", LineCoding.bitrate, LineCoding.datatype, parity[LineCoding.paritytype], stop[LineCoding.format]);
       break;
   }
 
@@ -367,7 +367,7 @@ static int8_t CDC_Control_FS  (uint8_t cmd, uint8_t* pbuf, uint16_t length)
       pbuf[4] = LineCoding.format;
       pbuf[5] = LineCoding.paritytype;
       pbuf[6] = LineCoding.datatype;
-      fprintf(&__stderr, "CDC_GET_LINE_CODING: %d-%d%c%d\r\n", LineCoding.bitrate, LineCoding.datatype, parity[LineCoding.paritytype], stop[LineCoding.format]);
+      fprintf(stderr, "CDC_GET_LINE_CODING: %lu-%d%c%d\r\n", LineCoding.bitrate, LineCoding.datatype, parity[LineCoding.paritytype], stop[LineCoding.format]);
       break;
   }
 
@@ -376,7 +376,7 @@ static int8_t CDC_Control_FS  (uint8_t cmd, uint8_t* pbuf, uint16_t length)
       PUSBD_SETUP_PKT setupPkt = (PUSBD_SETUP_PKT)pbuf;
       CDC_RTS = ((setupPkt->wVal & CDC_RTS_MASK) != 0);
       CDC_DTR = ((setupPkt->wVal & CDC_DTR_MASK) != 0);
-      fprintf(&__stderr, "CDC_SET_CONTROL_LINE_STATE: RTS=%d, DTR=%d\r\n", CDC_RTS, CDC_DTR);
+      fprintf(stderr, "CDC_SET_CONTROL_LINE_STATE: RTS=%d, DTR=%d\r\n", CDC_RTS, CDC_DTR);
       break;
   }
 
@@ -413,7 +413,7 @@ static int8_t CDC_Receive_FS (uint8_t* Buf, uint32_t *Len)
     int available = CDC_RxCapacity();
     if(available < *Len)
     {
-        fprintf(&__stderr, "Dropping %d bytes, only %d bytes available\r\n", *Len, available);
+        fprintf(stderr, "Dropping %lu bytes, only %d bytes available\r\n", *Len, available);
         return (USBD_FAIL);
     }
     else
@@ -421,7 +421,7 @@ static int8_t CDC_Receive_FS (uint8_t* Buf, uint32_t *Len)
         USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
         USBD_CDC_ReceivePacket(&hUsbDeviceFS);
         uint32_t buffered = CDC_BufferRxData(Buf, *Len);
-        fprintf(&__stderr, "Buffered %d bytes.\r\n", buffered);
+        fprintf(stderr, "Buffered %lu bytes.\r\n", buffered);
         return (USBD_OK);
     }
   /* USER CODE END 6 */ 

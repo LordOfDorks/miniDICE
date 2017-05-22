@@ -4,6 +4,11 @@
   * Description        : This file provides code for the MSP Initialization 
   *                      and de-Initialization codes.
   ******************************************************************************
+  * This notice applies to any and all portions of this file
+  * that are not between comment pairs USER CODE BEGIN and
+  * USER CODE END. Other portions of this file, whether 
+  * inserted by the user or by software development tools
+  * are owned by their respective copyright owners.
   *
   * Copyright (c) 2017 STMicroelectronics International N.V. 
   * All rights reserved.
@@ -44,7 +49,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "stm32l0xx_hal.h"
 
-extern void Error_Handler(void);
+extern void _Error_Handler(char *, int);
 /* USER CODE BEGIN 0 */
 
 /* USER CODE END 0 */
@@ -71,6 +76,40 @@ void HAL_MspInit(void)
   /* USER CODE BEGIN MspInit 1 */
 
   /* USER CODE END MspInit 1 */
+}
+
+void HAL_CRYP_MspInit(CRYP_HandleTypeDef* hcryp)
+{
+
+  if(hcryp->Instance==AES)
+  {
+  /* USER CODE BEGIN AES_MspInit 0 */
+
+  /* USER CODE END AES_MspInit 0 */
+    /* Peripheral clock enable */
+    __HAL_RCC_AES_CLK_ENABLE();
+  /* USER CODE BEGIN AES_MspInit 1 */
+
+  /* USER CODE END AES_MspInit 1 */
+  }
+
+}
+
+void HAL_CRYP_MspDeInit(CRYP_HandleTypeDef* hcryp)
+{
+
+  if(hcryp->Instance==AES)
+  {
+  /* USER CODE BEGIN AES_MspDeInit 0 */
+
+  /* USER CODE END AES_MspDeInit 0 */
+    /* Peripheral clock disable */
+    __HAL_RCC_AES_CLK_DISABLE();
+  /* USER CODE BEGIN AES_MspDeInit 1 */
+
+  /* USER CODE END AES_MspDeInit 1 */
+  }
+
 }
 
 void HAL_RNG_MspInit(RNG_HandleTypeDef* hrng)
@@ -100,10 +139,10 @@ void HAL_RNG_MspDeInit(RNG_HandleTypeDef* hrng)
   /* USER CODE END RNG_MspDeInit 0 */
     /* Peripheral clock disable */
     __HAL_RCC_RNG_CLK_DISABLE();
-  }
   /* USER CODE BEGIN RNG_MspDeInit 1 */
 
   /* USER CODE END RNG_MspDeInit 1 */
+  }
 
 }
 
@@ -134,10 +173,10 @@ void HAL_RTC_MspDeInit(RTC_HandleTypeDef* hrtc)
   /* USER CODE END RTC_MspDeInit 0 */
     /* Peripheral clock disable */
     __HAL_RCC_RTC_DISABLE();
-  }
   /* USER CODE BEGIN RTC_MspDeInit 1 */
 
   /* USER CODE END RTC_MspDeInit 1 */
+  }
 
 }
 
@@ -167,6 +206,32 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
 
   /* USER CODE END USART2_MspInit 1 */
   }
+  else if(huart->Instance==USART4)
+  {
+  /* USER CODE BEGIN USART4_MspInit 0 */
+
+  /* USER CODE END USART4_MspInit 0 */
+    /* Peripheral clock enable */
+    __HAL_RCC_USART4_CLK_ENABLE();
+  
+    /**USART4 GPIO Configuration    
+    PA0     ------> USART4_TX
+    PA1     ------> USART4_RX 
+    */
+    GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+    GPIO_InitStruct.Alternate = GPIO_AF6_USART4;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    /* USART4 interrupt Init */
+    HAL_NVIC_SetPriority(USART4_5_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(USART4_5_IRQn);
+  /* USER CODE BEGIN USART4_MspInit 1 */
+
+  /* USER CODE END USART4_MspInit 1 */
+  }
 
 }
 
@@ -186,98 +251,34 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* huart)
     */
     HAL_GPIO_DeInit(GPIOA, GPIO_PIN_2);
 
-  }
   /* USER CODE BEGIN USART2_MspDeInit 1 */
 
   /* USER CODE END USART2_MspDeInit 1 */
+  }
+  else if(huart->Instance==USART4)
+  {
+  /* USER CODE BEGIN USART4_MspDeInit 0 */
+
+  /* USER CODE END USART4_MspDeInit 0 */
+    /* Peripheral clock disable */
+    __HAL_RCC_USART4_CLK_DISABLE();
+  
+    /**USART4 GPIO Configuration    
+    PA0     ------> USART4_TX
+    PA1     ------> USART4_RX 
+    */
+    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_0|GPIO_PIN_1);
+
+    /* USART4 interrupt DeInit */
+    HAL_NVIC_DisableIRQ(USART4_5_IRQn);
+  /* USER CODE BEGIN USART4_MspDeInit 1 */
+
+  /* USER CODE END USART4_MspDeInit 1 */
+  }
 
 }
 
 /* USER CODE BEGIN 1 */
-void HAL_CRYP_MspInit(CRYP_HandleTypeDef *hcryp)
-{
-  static  DMA_HandleTypeDef   hdmaIn;
-  static  DMA_HandleTypeDef   hdmaOut;
-
-  /* Enable CRYP clock */
-  __HAL_RCC_AES_CLK_ENABLE();
-  
-  /* Force the CRYP Periheral Clock Reset */  
-  __HAL_RCC_AES_FORCE_RESET(); 
-  
-  /* Release the CRYP Periheral Clock Reset */  
-  __HAL_RCC_AES_RELEASE_RESET();
-  
-  /* Enable and set CRYP Interrupt to the highest priority */
-  HAL_NVIC_SetPriority(AES_RNG_LPUART1_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(AES_RNG_LPUART1_IRQn);
-  
-    /* Enable DMA1 clocks */
-  __HAL_RCC_DMA1_CLK_ENABLE();
-  __HAL_RCC_DMA1_FORCE_RESET();
-  __HAL_RCC_DMA1_RELEASE_RESET();
-  
-  /***************** Configure common DMA In parameters ***********************/
-  hdmaIn.Instance                 = DMA1_Channel1;
-  hdmaIn.Init.Direction           = DMA_MEMORY_TO_PERIPH;
-  hdmaIn.Init.PeriphInc           = DMA_PINC_DISABLE;
-  hdmaIn.Init.MemInc              = DMA_MINC_ENABLE;
-  hdmaIn.Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;
-  hdmaIn.Init.MemDataAlignment    = DMA_MDATAALIGN_WORD;
-  hdmaIn.Init.Mode                = DMA_NORMAL;
-  hdmaIn.Init.Priority            = DMA_PRIORITY_MEDIUM;
-  hdmaIn.Init.Request             = DMA_REQUEST_11;
-  
-  /* Associate the DMA handle */
-  __HAL_LINKDMA(hcryp, hdmain, hdmaIn);
-  
-  /* Deinitialize the Stream for new transfer */
-  HAL_DMA_DeInit(hcryp->hdmain);
-  
-  /* Configure the DMA Stream */
-  HAL_DMA_Init(hcryp->hdmain);      
-  
-  /* NVIC configuration for DMA Input data interrupt */
-  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 1, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
-  
-  /***************** Configure common DMA Out parameters **********************/
-  hdmaOut.Instance                 = DMA1_Channel3;
-  hdmaOut.Init.Direction           = DMA_PERIPH_TO_MEMORY;
-  hdmaOut.Init.PeriphInc           = DMA_PINC_DISABLE;
-  hdmaOut.Init.MemInc              = DMA_MINC_DISABLE;
-  hdmaOut.Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;
-  hdmaOut.Init.MemDataAlignment    = DMA_MDATAALIGN_WORD;
-  hdmaOut.Init.Mode                = DMA_NORMAL;
-  hdmaOut.Init.Priority            = DMA_PRIORITY_VERY_HIGH;
-  hdmaOut.Init.Request             = DMA_REQUEST_11;
-  
-  /* Associate the DMA handle */
-  __HAL_LINKDMA(hcryp, hdmaout, hdmaOut);
-  
-  /* Deinitialize the Stream for new processing */
-  HAL_DMA_DeInit(&hdmaOut);
-  
-  /* Configure the DMA Stream */
-  HAL_DMA_Init(&hdmaOut);
-  
-  /* NVIC configuration for DMA output data interrupt */
-  /* Already configured */
-  HAL_NVIC_SetPriority(DMA1_Channel2_3_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
-}
-
-/**
-  * @brief  DeInitializes the CRYP MSP.
-  * @param  hcryp: CRYP handle pointer
-  * @retval None
-  */
-void HAL_CRYP_MspDeInit(CRYP_HandleTypeDef *hcryp)
-{
-  /* Disable CRYP clock */
-  __HAL_RCC_AES_CLK_DISABLE();
-
-}
 
 /* USER CODE END 1 */
 

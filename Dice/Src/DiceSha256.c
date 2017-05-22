@@ -279,7 +279,7 @@ static void SHA256_Transform(DICE_SHA256_CONTEXT *context, const sha2_word32 *da
     a = b = c = d = e = f = g = h = T1 = T2 = 0;
 }
 
-void Dice_SHA256_Update(DICE_SHA256_CONTEXT *context, const sha2_uint8_t *data, size_t len)
+void Dice_SHA256_Update(DICE_SHA256_CONTEXT *context, const sha2_uint8_t *data, uint32_t len)
 {
     unsigned int    freespace, usedspace;
 
@@ -372,7 +372,9 @@ void Dice_SHA256_Final(DICE_SHA256_CONTEXT *context, sha2_uint8_t *digest)
             *context->buffer = 0x80;
         }
         /* Set the bit count: */
-        *(sha2_word64 *)&context->buffer[SHA256_SHORT_BLOCK_LENGTH] = context->bitcount;
+        sha2_word64 *pBitCount = (sha2_word64 *)&context->buffer[SHA256_SHORT_BLOCK_LENGTH];
+        *pBitCount = context->bitcount;
+//        *((sha2_word64 *)&context->buffer[SHA256_SHORT_BLOCK_LENGTH]) = context->bitcount;
 
         /* Final transform: */
         SHA256_Transform(context, (sha2_word32 *)context->buffer);
@@ -396,14 +398,14 @@ void Dice_SHA256_Final(DICE_SHA256_CONTEXT *context, sha2_uint8_t *digest)
     usedspace = 0;
 }
 
-void Dice_SHA256_Block_ctx(DICE_SHA256_CONTEXT *context, const uint8_t *buf, size_t bufSize, uint8_t *digest)
+void Dice_SHA256_Block_ctx(DICE_SHA256_CONTEXT *context, const uint8_t *buf, uint32_t bufSize, uint8_t *digest)
 {
     Dice_SHA256_Init(context);
     Dice_SHA256_Update(context, buf, bufSize);
     Dice_SHA256_Final(context, digest);
 }
 
-void Dice_SHA256_Block(const uint8_t *buf, size_t bufSize, uint8_t *digest)
+void Dice_SHA256_Block(const uint8_t *buf, uint32_t bufSize, uint8_t *digest)
 {
     DICE_SHA256_CONTEXT context;
     Dice_SHA256_Init(&context);

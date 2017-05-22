@@ -255,14 +255,14 @@ DERAddUTCTime(
     char timeStr[14] = {0};
 
 #ifndef WIN32
-    struct tm* timeinfo = localtime(&TimeStamp);
+    struct tm* timeinfo = localtime((const time_t *)&TimeStamp);
     sprintf(timeStr, "%02d%02d%02d%02d%02d%02dZ", timeinfo->tm_year - 100, timeinfo->tm_mon + 1, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 #else
     LONGLONG ll = Int32x32To64(TimeStamp, 10000000) + 116444736000000000;
     FILETIME fTime = {(DWORD)ll , (DWORD) (ll>>32)};
     SYSTEMTIME sTime = {0};
     FileTimeToSystemTime(&fTime, &sTime);
-    sprintf(timeStr, "%02d%02d%02d%02d%02d%02dZ", sTime.wYear - 2000, sTime.wMonth, sTime.wDay, sTime.wHour, sTime.wMinute, sTime.wSecond);
+    sprintf_s(timeStr, sizeof(timeStr), "%02d%02d%02d%02d%02d%02dZ", sTime.wYear - 2000, sTime.wMonth, sTime.wDay, sTime.wHour, sTime.wMinute, sTime.wSecond);
 #endif
     uint32_t j, numChar = (uint32_t)strlen(timeStr);
 

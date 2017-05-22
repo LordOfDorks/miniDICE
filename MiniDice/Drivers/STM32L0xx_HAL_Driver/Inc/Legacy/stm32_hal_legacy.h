@@ -2,8 +2,8 @@
   ******************************************************************************
   * @file    stm32_hal_legacy.h
   * @author  MCD Application Team
-  * @version V1.7.0
-  * @date    31-May-2016
+  * @version V1.8.1
+  * @date    14-April-2017
   * @brief   This file contains aliases definition for the STM32Cube HAL constants 
   *          macros and functions maintained for legacy purpose.
   ******************************************************************************
@@ -138,6 +138,7 @@
 #define COMP_EXTI_LINE_COMP5_EVENT     COMP_EXTI_LINE_COMP5
 #define COMP_EXTI_LINE_COMP6_EVENT     COMP_EXTI_LINE_COMP6
 #define COMP_EXTI_LINE_COMP7_EVENT     COMP_EXTI_LINE_COMP7
+#define COMP_LPTIMCONNECTION_ENABLED   COMP_LPTIMCONNECTION_IN1_ENABLED    /*!< COMPX output is connected to LPTIM input 1 */
 #define COMP_OUTPUT_COMP6TIM2OCREFCLR  COMP_OUTPUT_COMP6_TIM2OCREFCLR
 #if defined(STM32F373xC) || defined(STM32F378xx)
 #define COMP_OUTPUT_TIM3IC1            COMP_OUTPUT_COMP1_TIM3IC1
@@ -196,6 +197,7 @@
 #define COMP_BLANKINGSRCE_TIM3OC4        COMP_BLANKINGSRC_TIM3_OC4_COMP2
 #define COMP_BLANKINGSRCE_TIM8OC5        COMP_BLANKINGSRC_TIM8_OC5_COMP2
 #define COMP_BLANKINGSRCE_TIM15OC1       COMP_BLANKINGSRC_TIM15_OC1_COMP2
+#define COMP_BLANKINGSRCE_NONE           COMP_BLANKINGSRC_NONE
 #endif
 
 #if defined(STM32L0)
@@ -354,6 +356,7 @@
 #define OB_RDP_LEVEL0                 OB_RDP_LEVEL_0
 #define OB_RDP_LEVEL1                 OB_RDP_LEVEL_1
 #define OB_RDP_LEVEL2                 OB_RDP_LEVEL_2
+
 /**
   * @}
   */
@@ -851,6 +854,8 @@
 #define __DIVFRAQ_SAMPLING8             UART_DIVFRAQ_SAMPLING8
 #define __UART_BRR_SAMPLING8            UART_BRR_SAMPLING8
 
+#define __DIV_LPUART                    UART_DIV_LPUART
+
 #define UART_WAKEUPMETHODE_IDLELINE     UART_WAKEUPMETHOD_IDLELINE
 #define UART_WAKEUPMETHODE_ADDRESSMARK  UART_WAKEUPMETHOD_ADDRESSMARK
 
@@ -941,9 +946,12 @@
 #define ETH_MAC_RXFIFO_BELOW_THRESHOLD   ((uint32_t)0x00000100)  /* Rx FIFO fill level: fill-level below flow-control de-activate threshold */
 #define ETH_MAC_RXFIFO_ABOVE_THRESHOLD   ((uint32_t)0x00000200)  /* Rx FIFO fill level: fill-level above flow-control activate threshold */
 #define ETH_MAC_RXFIFO_FULL              ((uint32_t)0x00000300)  /* Rx FIFO fill level: full */
+#if defined(STM32F1)
+#else
 #define ETH_MAC_READCONTROLLER_IDLE               ((uint32_t)0x00000000)  /* Rx FIFO read controller IDLE state */
 #define ETH_MAC_READCONTROLLER_READING_DATA       ((uint32_t)0x00000020)  /* Rx FIFO read controller Reading frame data */
 #define ETH_MAC_READCONTROLLER_READING_STATUS     ((uint32_t)0x00000040)  /* Rx FIFO read controller Reading frame status (or time-stamp) */
+#endif
 #define ETH_MAC_READCONTROLLER_FLUSHING           ((uint32_t)0x00000060)  /* Rx FIFO read controller Flushing the frame data and status */
 #define ETH_MAC_RXFIFO_WRITE_ACTIVE     ((uint32_t)0x00000010)  /* Rx FIFO write controller active */
 #define ETH_MAC_SMALL_FIFO_NOTACTIVE    ((uint32_t)0x00000000)  /* MAC small FIFO read / write controllers not active */
@@ -2223,26 +2231,26 @@
 #define __USART3_CLK_SLEEP_ENABLE __HAL_RCC_USART3_CLK_SLEEP_ENABLE
 #define __USART3_FORCE_RESET __HAL_RCC_USART3_FORCE_RESET
 #define __USART3_RELEASE_RESET __HAL_RCC_USART3_RELEASE_RESET
-#define __USART4_CLK_DISABLE        __HAL_RCC_USART4_CLK_DISABLE
-#define __USART4_CLK_ENABLE         __HAL_RCC_USART4_CLK_ENABLE
-#define __USART4_CLK_SLEEP_ENABLE   __HAL_RCC_USART4_CLK_SLEEP_ENABLE
-#define __USART4_CLK_SLEEP_DISABLE  __HAL_RCC_USART4_CLK_SLEEP_DISABLE 
-#define __USART4_FORCE_RESET        __HAL_RCC_USART4_FORCE_RESET
-#define __USART4_RELEASE_RESET      __HAL_RCC_USART4_RELEASE_RESET
-#define __USART5_CLK_DISABLE        __HAL_RCC_USART5_CLK_DISABLE
-#define __USART5_CLK_ENABLE         __HAL_RCC_USART5_CLK_ENABLE
-#define __USART5_CLK_SLEEP_ENABLE   __HAL_RCC_USART5_CLK_SLEEP_ENABLE
-#define __USART5_CLK_SLEEP_DISABLE  __HAL_RCC_USART5_CLK_SLEEP_DISABLE 
-#define __USART5_FORCE_RESET        __HAL_RCC_USART5_FORCE_RESET
-#define __USART5_RELEASE_RESET      __HAL_RCC_USART5_RELEASE_RESET
-#define __USART7_CLK_DISABLE        __HAL_RCC_USART7_CLK_DISABLE
-#define __USART7_CLK_ENABLE         __HAL_RCC_USART7_CLK_ENABLE
-#define __USART7_FORCE_RESET        __HAL_RCC_USART7_FORCE_RESET
-#define __USART7_RELEASE_RESET      __HAL_RCC_USART7_RELEASE_RESET
-#define __USART8_CLK_DISABLE        __HAL_RCC_USART8_CLK_DISABLE
-#define __USART8_CLK_ENABLE         __HAL_RCC_USART8_CLK_ENABLE
-#define __USART8_FORCE_RESET        __HAL_RCC_USART8_FORCE_RESET
-#define __USART8_RELEASE_RESET      __HAL_RCC_USART8_RELEASE_RESET
+#define __USART4_CLK_DISABLE        __HAL_RCC_UART4_CLK_DISABLE
+#define __USART4_CLK_ENABLE         __HAL_RCC_UART4_CLK_ENABLE
+#define __USART4_CLK_SLEEP_ENABLE   __HAL_RCC_UART4_CLK_SLEEP_ENABLE
+#define __USART4_CLK_SLEEP_DISABLE  __HAL_RCC_UART4_CLK_SLEEP_DISABLE 
+#define __USART4_FORCE_RESET        __HAL_RCC_UART4_FORCE_RESET
+#define __USART4_RELEASE_RESET      __HAL_RCC_UART4_RELEASE_RESET
+#define __USART5_CLK_DISABLE        __HAL_RCC_UART5_CLK_DISABLE
+#define __USART5_CLK_ENABLE         __HAL_RCC_UART5_CLK_ENABLE
+#define __USART5_CLK_SLEEP_ENABLE   __HAL_RCC_UART5_CLK_SLEEP_ENABLE
+#define __USART5_CLK_SLEEP_DISABLE  __HAL_RCC_UART5_CLK_SLEEP_DISABLE 
+#define __USART5_FORCE_RESET        __HAL_RCC_UART5_FORCE_RESET
+#define __USART5_RELEASE_RESET      __HAL_RCC_UART5_RELEASE_RESET
+#define __USART7_CLK_DISABLE        __HAL_RCC_UART7_CLK_DISABLE
+#define __USART7_CLK_ENABLE         __HAL_RCC_UART7_CLK_ENABLE
+#define __USART7_FORCE_RESET        __HAL_RCC_UART7_FORCE_RESET
+#define __USART7_RELEASE_RESET      __HAL_RCC_UART7_RELEASE_RESET
+#define __USART8_CLK_DISABLE        __HAL_RCC_UART8_CLK_DISABLE
+#define __USART8_CLK_ENABLE         __HAL_RCC_UART8_CLK_ENABLE
+#define __USART8_FORCE_RESET        __HAL_RCC_UART8_FORCE_RESET
+#define __USART8_RELEASE_RESET      __HAL_RCC_UART8_RELEASE_RESET
 #define __USB_CLK_DISABLE         __HAL_RCC_USB_CLK_DISABLE
 #define __USB_CLK_ENABLE          __HAL_RCC_USB_CLK_ENABLE
 #define __USB_FORCE_RESET         __HAL_RCC_USB_FORCE_RESET
@@ -2644,10 +2652,22 @@
 
 #define RCC_IT_HSI14                RCC_IT_HSI14RDY
 
-#if defined(STM32L0)
-#define RCC_IT_LSECSS              RCC_IT_CSSLSE 
-#define RCC_IT_CSS                 RCC_IT_CSSHSE
-#endif
+#define RCC_IT_CSSLSE               RCC_IT_LSECSS
+#define RCC_IT_CSSHSE               RCC_IT_CSS
+
+#define RCC_PLLMUL_3                RCC_PLL_MUL3
+#define RCC_PLLMUL_4                RCC_PLL_MUL4
+#define RCC_PLLMUL_6                RCC_PLL_MUL6
+#define RCC_PLLMUL_8                RCC_PLL_MUL8
+#define RCC_PLLMUL_12               RCC_PLL_MUL12
+#define RCC_PLLMUL_16               RCC_PLL_MUL16
+#define RCC_PLLMUL_24               RCC_PLL_MUL24
+#define RCC_PLLMUL_32               RCC_PLL_MUL32
+#define RCC_PLLMUL_48               RCC_PLL_MUL48
+
+#define RCC_PLLDIV_2                RCC_PLL_DIV2
+#define RCC_PLLDIV_3                RCC_PLL_DIV3
+#define RCC_PLLDIV_4                RCC_PLL_DIV4
 
 #define IS_RCC_MCOSOURCE            IS_RCC_MCO1SOURCE
 #define __HAL_RCC_MCO_CONFIG        __HAL_RCC_MCO1_CONFIG
@@ -2768,7 +2788,6 @@
 #define RCC_DFSDMCLKSOURCE_SYSCLK   RCC_DFSDM1CLKSOURCE_SYSCLK
 #define __HAL_RCC_DFSDM_CONFIG      __HAL_RCC_DFSDM1_CONFIG
 #define __HAL_RCC_GET_DFSDM_SOURCE  __HAL_RCC_GET_DFSDM1_SOURCE
-
 /**
   * @}
   */

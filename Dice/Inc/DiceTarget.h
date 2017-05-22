@@ -15,9 +15,12 @@
  *    ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  *    OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  ******************************************************************************/
-
+#ifndef WIN32
+#include "stm32l0xx_hal.h"
+#endif
 #define assert(expr) ((void)0)
 
+#ifdef WIN32
 typedef signed char int8_t;           // 8-bit signed integer
 typedef unsigned char uint8_t;        // 8-bit unsigned integer
 typedef signed short int16_t;         // 16-bit signed integer
@@ -26,7 +29,7 @@ typedef signed int int32_t;           // 32-bit signed integer
 typedef unsigned int uint32_t;        // 32-bit unsigned integer
 typedef signed long long int64_t;     // 64-bit signed integer
 typedef unsigned long long uint64_t;  // 64-bit unsigned integer
-typedef unsigned int size_t;          // 32-bit unsigned integer
+#endif
 
 #ifndef MIN
 #define MIN(a,b) (((a)<(b))?(a):(b))

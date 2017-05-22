@@ -3,6 +3,11 @@
   * File Name          : main.c
   * Description        : Main program body
   ******************************************************************************
+  * This notice applies to any and all portions of this file
+  * that are not between comment pairs USER CODE BEGIN and
+  * USER CODE END. Other portions of this file, whether 
+  * inserted by the user or by software development tools
+  * are owned by their respective copyright owners.
   *
   * Copyright (c) 2017 STMicroelectronics International N.V. 
   * All rights reserved.
@@ -46,76 +51,48 @@
 #include "usb_device.h"
 
 /* USER CODE BEGIN Includes */
-#include "usbd_cdc_if.h"
 #include "DiceCore.h"
+
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
+CRYP_HandleTypeDef hcryp;
+
 RNG_HandleTypeDef hrng;
 
 RTC_HandleTypeDef hrtc;
 
 UART_HandleTypeDef huart2;
+UART_HandleTypeDef huart4;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-CRYP_HandleTypeDef hcryp;
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
-void Error_Handler(void);
 static void MX_GPIO_Init(void);
 static void MX_RNG_Init(void);
 static void MX_RTC_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_USART4_UART_Init(void);
+static void MX_AES_Init(void);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
-#define DEFAULT_FILE_HANDLE_STDOUT (1)
-#define DEFAULT_FILE_HANDLE_STDIN (2)
-#define DEFAULT_FILE_HANDLE_STDERR (3)
-struct __FILE { int handle; };
-FILE __stdout = {DEFAULT_FILE_HANDLE_STDOUT};
-FILE __stdin = {DEFAULT_FILE_HANDLE_STDIN};
-FILE __stderr = {DEFAULT_FILE_HANDLE_STDERR};
+
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
-int fputc(int ch, FILE *f)
-{
-    if(f->handle == DEFAULT_FILE_HANDLE_STDOUT)
-    {
-        return CDC_Transmit((uint8_t*)&ch, sizeof(uint8_t));
-    }
-    else if(f->handle == DEFAULT_FILE_HANDLE_STDERR)
-    {
-        while(HAL_UART_Transmit(&huart2, (uint8_t*)&ch, sizeof(uint8_t), HAL_MAX_DELAY) == HAL_BUSY);
-        return ch;
-    }
-    return -1;
-}
 
-int fgetc(FILE *f)
-{
-  if(f->handle == DEFAULT_FILE_HANDLE_STDIN)
-  {
-      int ch = 0;
-      if(CDC_Receive((uint8_t*)&ch, 1) != 0)
-      {
-          return ch;
-      }
-  }
-  return -1;
-}
 /* USER CODE END 0 */
 
 int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-//    DICE_STATUS retVal;
+
   /* USER CODE END 1 */
 
   /* MCU Configuration----------------------------------------------------------*/
@@ -123,8 +100,16 @@ int main(void)
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
   /* Configure the system clock */
   SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
@@ -132,13 +117,16 @@ int main(void)
   MX_RTC_Init();
   MX_USART2_UART_Init();
   MX_USB_DEVICE_Init();
+  MX_USART4_UART_Init();
+  MX_AES_Init();
 
   /* USER CODE BEGIN 2 */
-    EPRINTF("==========================\r\n");
-    EPRINTF("    DICE APP: Payload!\r\n");
-    EPRINTF("==========================\r\n");
-    EPRINTF("DICE Certificate Bag(%d):\r\n%s\r\n", DICERAMAREA->info.certBagLen, DICERAMAREA->info.certBag);
+
   /* USER CODE END 2 */
+  EPRINTF("==========================\r\n");
+  EPRINTF("    DICE APP: Payload!\r\n");
+  EPRINTF("==========================\r\n");
+  EPRINTF("DICE Certificate Bag(%lu):\r\n%s\r\n", DICERAMAREA->info.certBagLen, DICERAMAREA->info.certBag);
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -172,13 +160,17 @@ void SystemClock_Config(void)
     */
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
+    /**Configure LSE Drive Capability 
+    */
+  __HAL_RCC_LSEDRIVE_CONFIG(RCC_LSEDRIVE_LOW);
+
     /**Initializes the CPU, AHB and APB busses clocks 
     */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSE
                               |RCC_OSCILLATORTYPE_HSI48;
+  RCC_OscInitStruct.LSEState = RCC_LSE_ON;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = 16;
-  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.HSI48State = RCC_HSI48_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
@@ -186,7 +178,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLDIV = RCC_PLLDIV_2;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
-    Error_Handler();
+    _Error_Handler(__FILE__, __LINE__);
   }
 
     /**Initializes the CPU, AHB and APB busses clocks 
@@ -200,17 +192,17 @@ void SystemClock_Config(void)
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
   {
-    Error_Handler();
+    _Error_Handler(__FILE__, __LINE__);
   }
 
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART2|RCC_PERIPHCLK_RTC
-                              |RCC_PERIPHCLK_USB;
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART1|RCC_PERIPHCLK_USART2
+                              |RCC_PERIPHCLK_RTC|RCC_PERIPHCLK_USB;
   PeriphClkInit.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
-  PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
+  PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSE;
   PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_HSI48;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
-    Error_Handler();
+    _Error_Handler(__FILE__, __LINE__);
   }
 
     /**Configure the Systick interrupt time 
@@ -225,6 +217,38 @@ void SystemClock_Config(void)
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 }
 
+/* AES init function */
+static void MX_AES_Init(void)
+{
+
+   uint8_t pKey[16] ;
+
+  hcryp.Instance = AES;
+  hcryp.Init.DataType = CRYP_DATATYPE_32B;
+  pKey[0] = 0x00;
+  pKey[1] = 0x00;
+  pKey[2] = 0x00;
+  pKey[3] = 0x00;
+  pKey[4] = 0x00;
+  pKey[5] = 0x00;
+  pKey[6] = 0x00;
+  pKey[7] = 0x00;
+  pKey[8] = 0x00;
+  pKey[9] = 0x00;
+  pKey[10] = 0x00;
+  pKey[11] = 0x00;
+  pKey[12] = 0x00;
+  pKey[13] = 0x00;
+  pKey[14] = 0x00;
+  pKey[15] = 0x00;
+  hcryp.Init.pKey = &pKey[0];
+  if (HAL_CRYP_Init(&hcryp) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+}
+
 /* RNG init function */
 static void MX_RNG_Init(void)
 {
@@ -232,7 +256,7 @@ static void MX_RNG_Init(void)
   hrng.Instance = RNG;
   if (HAL_RNG_Init(&hrng) != HAL_OK)
   {
-    Error_Handler();
+    _Error_Handler(__FILE__, __LINE__);
   }
 
 }
@@ -253,7 +277,7 @@ static void MX_RTC_Init(void)
   hrtc.Init.OutPutType = RTC_OUTPUT_TYPE_OPENDRAIN;
   if (HAL_RTC_Init(&hrtc) != HAL_OK)
   {
-    Error_Handler();
+    _Error_Handler(__FILE__, __LINE__);
   }
 
 }
@@ -274,7 +298,28 @@ static void MX_USART2_UART_Init(void)
   huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
   if (HAL_HalfDuplex_Init(&huart2) != HAL_OK)
   {
-    Error_Handler();
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+}
+
+/* USART4 init function */
+static void MX_USART4_UART_Init(void)
+{
+
+  huart4.Instance = USART4;
+  huart4.Init.BaudRate = 115200;
+  huart4.Init.WordLength = UART_WORDLENGTH_8B;
+  huart4.Init.StopBits = UART_STOPBITS_1;
+  huart4.Init.Parity = UART_PARITY_NONE;
+  huart4.Init.Mode = UART_MODE_TX_RX;
+  huart4.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart4.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart4.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart4.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart4) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
   }
 
 }
@@ -344,14 +389,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   * @param  None
   * @retval None
   */
-void Error_Handler(void)
+void _Error_Handler(char * file, int line)
 {
-  /* USER CODE BEGIN Error_Handler */
+  /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   while(1) 
   {
   }
-  /* USER CODE END Error_Handler */ 
+  /* USER CODE END Error_Handler_Debug */ 
 }
 
 #ifdef USE_FULL_ASSERT

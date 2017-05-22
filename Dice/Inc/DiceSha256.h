@@ -78,7 +78,7 @@ void Dice_SHA256_Init(DICE_SHA256_CONTEXT *context);
 // @param bufSize the number of bytes to digest
 //
 void Dice_SHA256_Update(DICE_SHA256_CONTEXT *context,
-                        const sha2_uint8_t *data, size_t len);
+                        const sha2_uint8_t *data, uint32_t len);
 
 //
 // Retrieve the final digest
@@ -95,7 +95,7 @@ void Dice_SHA256_Final(DICE_SHA256_CONTEXT *context, sha2_uint8_t *digest);
 // @param digest the buffer to hold the digest.  Must be of size SHA256_DIGEST_LENGTH
 //
 void Dice_SHA256_Block_ctx(DICE_SHA256_CONTEXT *context,
-                           const uint8_t *buf, size_t bufSize,
+                           const uint8_t *buf, uint32_t bufSize,
                            uint8_t *digest);
 
 //
@@ -104,7 +104,7 @@ void Dice_SHA256_Block_ctx(DICE_SHA256_CONTEXT *context,
 // @param bufSize the number of bytes in the buffer
 // @param digest the buffer to hold the digest.  Must be of size SHA256_DIGEST_LENGTH
 //
-void Dice_SHA256_Block(const uint8_t *buf, size_t bufSize,
+void Dice_SHA256_Block(const uint8_t *buf, uint32_t bufSize,
                        uint8_t *digest);
 
 #ifdef __cplusplus

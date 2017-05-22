@@ -3,6 +3,11 @@
   * File Name          : main.c
   * Description        : Main program body
   ******************************************************************************
+  * This notice applies to any and all portions of this file
+  * that are not between comment pairs USER CODE BEGIN and
+  * USER CODE END. Other portions of this file, whether 
+  * inserted by the user or by software development tools
+  * are owned by their respective copyright owners.
   *
   * Copyright (c) 2017 STMicroelectronics International N.V. 
   * All rights reserved.
@@ -47,6 +52,7 @@
 
 /* USER CODE BEGIN Includes */
 #include "DiceCore.h"
+
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -58,20 +64,11 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-#ifndef SILENTDICE
-#define DEFAULT_FILE_HANDLE_STDOUT (1)
-#define DEFAULT_FILE_HANDLE_STDIN (2)
-#define DEFAULT_FILE_HANDLE_STDERR (3)
-struct __FILE { int handle; };
-FILE __stdout = {DEFAULT_FILE_HANDLE_STDOUT};
-FILE __stdin = {DEFAULT_FILE_HANDLE_STDIN};
-FILE __stderr = {DEFAULT_FILE_HANDLE_STDERR};
-#endif
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
-void Error_Handler(void);
 static void MX_GPIO_Init(void);
 #ifndef SILENTDICE
 static void MX_USART2_UART_Init(void);
@@ -84,37 +81,6 @@ static void MX_RNG_Init(void);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
-#ifndef SILENTDICE
-int fputc(int ch, FILE *f)
-{
-    if(f->handle == DEFAULT_FILE_HANDLE_STDOUT)
-    {
-//        while(CDC_Transmit_FS((uint8_t*)&ch, sizeof(uint8_t)) == USBD_BUSY);
-//        return ch;
-    }
-    else if(f->handle == DEFAULT_FILE_HANDLE_STDERR)
-    {
-        while(HAL_UART_Transmit(&huart2, (uint8_t*)&ch, sizeof(uint8_t), HAL_MAX_DELAY) == HAL_BUSY);
-        return ch;
-    }
-    return -1;
-}
-
-int fgetc(FILE *f)
-{
-  if(f->handle == DEFAULT_FILE_HANDLE_STDIN)
-  {
-//      while((!CDC_RX_Data) && (CDC_DTR));
-//      if(CDC_DTR)
-//      {
-//          int ch = *CDC_RX_Data;
-//          CDC_RX_Data = NULL;
-//          return ch;
-//      }
-  }
-  return -1;
-}
-#endif
 
 /* USER CODE END 0 */
 
@@ -128,82 +94,90 @@ int main(void)
   /* MCU Configuration----------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-    HAL_Init();
+  HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
 
   /* Configure the system clock */
   SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
 #ifndef SILENTDICE
   MX_USART2_UART_Init();
 #endif
-//  MX_USB_DEVICE_Init();
   MX_RNG_Init();
+//  MX_USB_DEVICE_Init();
 
   /* USER CODE BEGIN 2 */
-    EPRINTF("\r\n\r\n++++++++++++++++\r\n");
-    EPRINTF("--> miniDICE <--\r\n");
-    EPRINTF("++++++++++++++++\r\n");
+  EPRINTF("\r\n\r\n++++++++++++++++\r\n");
+  EPRINTF("--> miniDICE <--\r\n");
+  EPRINTF("++++++++++++++++\r\n");
 
-    GPIO_PinState fwButPressed = HAL_GPIO_ReadPin(FWBut_GPIO_Port, FWBut_Pin);
-    if(fwButPressed == GPIO_PIN_SET) EPRINTF("INFO: DFU loader requested.\r\n");
+  GPIO_PinState fwButPressed = HAL_GPIO_ReadPin(FWBut_GPIO_Port, FWBut_Pin);
+  if(fwButPressed == GPIO_PIN_SET) EPRINTF("INFO: DFU loader requested.\r\n");
 
-    if(DiceLockDown() != DICE_SUCCESS)
-    {
-        Error_Handler();
-    }
+  if(DiceLockDown() != DICE_SUCCESS)
+  {
+      Error_Handler();
+  }
 
-    if(((retVal = DiceInitialize()) != DICE_SUCCESS) && (retVal != DICE_LOAD_MODULE_FAILED))
-    {
-        Error_Handler();
-    }
+  if(((retVal = DiceInitialize()) != DICE_SUCCESS) && (retVal != DICE_LOAD_MODULE_FAILED))
+  {
+      Error_Handler();
+  }
 
-    if((retVal == DICE_LOAD_MODULE_FAILED) ||
-       (fwButPressed == GPIO_PIN_SET))
-    {
-        if((DICEFUSEAREA->info.properties.noClear) && ((retVal = DiceSecure()) != DICE_SUCCESS))
-        {
-            Error_Handler();
-        }
-        DiceGenerateDFUString();
+  if((retVal == DICE_LOAD_MODULE_FAILED) ||
+     (fwButPressed == GPIO_PIN_SET))
+  {
+      if((DICEFUSEAREA->info.properties.noClear) && ((retVal = DiceSecure()) != DICE_SUCCESS))
+      {
+          Error_Handler();
+      }
+      DiceGenerateDFUString();
 
-        MX_USB_DEVICE_Init();
-        
-        // The only way out of here is a reboot
-        if(!__HAL_FIREWALL_IS_ENABLED())
-        {
-            EPRINTF("INFO: Reboot to exit DFU mode. Policy updates permitted.\r\n");
-            for(;;) DiceBlink(DICEBLINKEARLYDFU);
-        }
-        else
-        {
-            EPRINTF("INFO: Reboot to exit DFU mode.\r\n");
-            for(;;) DiceBlink(DICEBLINKDFU);
-        }
-    }
-    
-    // No way past this point without security
-    if((retVal = DiceSecure()) != DICE_SUCCESS)
-    {
-        Error_Handler();
-    }
+      MX_USB_DEVICE_Init();
 
-    // The point of no return: Launch the application
-    EPRINTF("INFO: Preparing payload APP launch...\r\n\r\n");
-    // Release the clock source
-    HAL_RCC_DeInit();
-    // Release the HAL
-    HAL_DeInit();
-    // Redirect the vector table to the application vector table
-    SCB->VTOR = DICEAPPENTRY;
-    // Wipe all accessible RAM to make sure we didn't leave anything behind
-    for(uint32_t n = DICEWIPERAMSTARTOFFSET; n < DICERAMSIZE; n++) ((uint8_t*)DICERAMSTART)[n] = 0x00;
-    // Set the stackpointer to where the application expects it
-    __set_MSP(*((uint32_t*)DICEAPPENTRY));
-    // Jump into the abyss
-    ((void (*)(void)) *((uint32_t*)(DICEAPPENTRY + sizeof(uint32_t))))();
-    // We will never return from this call!!
+      // The only way out of here is a reboot
+      if(!__HAL_FIREWALL_IS_ENABLED())
+      {
+          EPRINTF("INFO: Reboot to exit DFU mode. Policy updates permitted.\r\n");
+          for(;;) DiceBlink(DICEBLINKEARLYDFU);
+      }
+      else
+      {
+          EPRINTF("INFO: Reboot to exit DFU mode.\r\n");
+          for(;;) DiceBlink(DICEBLINKDFU);
+      }
+  }
+
+  // No way past this point without security
+  if((retVal = DiceSecure()) != DICE_SUCCESS)
+  {
+      Error_Handler();
+  }
+
+  // The point of no return: Launch the application
+  EPRINTF("INFO: Preparing payload APP launch...\r\n\r\n");
+  // Release the clock source
+  HAL_RCC_DeInit();
+  // Release the HAL
+  HAL_DeInit();
+  // Redirect the vector table to the application vector table
+  SCB->VTOR = DICEAPPENTRY;
+  // Wipe all accessible RAM to make sure we didn't leave anything behind
+  for(uint32_t n = DICEWIPERAMSTARTOFFSET; n < DICERAMSIZE; n++) ((uint8_t*)DICERAMSTART)[n] = 0x00;
+  // Set the stackpointer to where the application expects it
+  __set_MSP(*((uint32_t*)DICEAPPENTRY));
+  // Jump into the abyss
+  ((void (*)(void)) *((uint32_t*)(DICEAPPENTRY + sizeof(uint32_t))))();
+  // We will never return from this call!!
 
   /* USER CODE END 2 */
 
@@ -216,7 +190,6 @@ int main(void)
   /* USER CODE BEGIN 3 */
     EPRINTF("ERROR: How the hell did we get here?!?\r\n");
     HAL_Delay(1000);
-
   }
   /* USER CODE END 3 */
 
@@ -247,7 +220,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLDIV = RCC_PLLDIV_2;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
-    Error_Handler();
+    _Error_Handler(__FILE__, __LINE__);
   }
 
     /**Initializes the CPU, AHB and APB busses clocks 
@@ -261,7 +234,7 @@ void SystemClock_Config(void)
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
   {
-    Error_Handler();
+    _Error_Handler(__FILE__, __LINE__);
   }
 
   PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART2|RCC_PERIPHCLK_USB;
@@ -269,7 +242,7 @@ void SystemClock_Config(void)
   PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_HSI48;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
-    Error_Handler();
+    _Error_Handler(__FILE__, __LINE__);
   }
 
     /**Configure the Systick interrupt time 
@@ -291,7 +264,7 @@ static void MX_RNG_Init(void)
   hrng.Instance = RNG;
   if (HAL_RNG_Init(&hrng) != HAL_OK)
   {
-    Error_Handler();
+    _Error_Handler(__FILE__, __LINE__);
   }
 
 }
@@ -311,9 +284,9 @@ static void MX_USART2_UART_Init(void)
   huart2.Init.OverSampling = UART_OVERSAMPLING_16;
   huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
   huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-  if (HAL_HalfDuplex_Init(&huart2) != HAL_OK)
+  if (HAL_UART_Init(&huart2) != HAL_OK)
   {
-    Error_Handler();
+    _Error_Handler(__FILE__, __LINE__);
   }
 
 }
@@ -332,6 +305,7 @@ static void MX_GPIO_Init(void)
   GPIO_InitTypeDef GPIO_InitStruct;
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
@@ -362,15 +336,15 @@ static void MX_GPIO_Init(void)
   * @param  None
   * @retval None
   */
-void Error_Handler(void)
+void _Error_Handler(char * file, int line)
 {
-  /* USER CODE BEGIN Error_Handler */
+  /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   while(1) 
   {
       DiceBlink(DICEBLINKERROR);
   }
-  /* USER CODE END Error_Handler */ 
+  /* USER CODE END Error_Handler_Debug */ 
 }
 
 #ifdef USE_FULL_ASSERT

@@ -3,6 +3,11 @@
   * @file           : usbd_dfu_if.c
   * @brief          :
   ******************************************************************************
+  * This notice applies to any and all portions of this file
+  * that are not between comment pairs USER CODE BEGIN and
+  * USER CODE END. Other portions of this file, whether 
+  * inserted by the user or by software development tools
+  * are owned by their respective copyright owners.
   *
   * Copyright (c) 2017 STMicroelectronics International N.V. 
   * All rights reserved.
@@ -67,7 +72,7 @@
 /** @defgroup USBD_DFU_Private_Defines
   * @{
   */ 
-#define FLASH_DESC_STR      "@miniDICE /0x08000000/64*001Kg/0x08010000/64*001Kg/0x08020000/64*001Kg"
+#define FLASH_DESC_STR      "@Internal Flash   /0x08000000/03*016Ka,01*016Kg,01*064Kg,07*128Kg,04*016Kg,01*064Kg,07*128Kg"  
 /* USER CODE BEGIN PRIVATE_DEFINES */
 #define FLASH_ERASE_TIME    (uint16_t)50
 #define FLASH_PROGRAM_TIME  (uint16_t)50
@@ -119,7 +124,6 @@ static uint16_t MEM_If_DeInit_FS(void);
 static uint16_t MEM_If_GetStatus_FS (uint32_t Add, uint8_t Cmd, uint8_t *buffer);
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_DECLARATION */
-
 /* USER CODE END PRIVATE_FUNCTIONS_DECLARATION */
 
 /**
@@ -188,50 +192,50 @@ uint16_t MEM_If_DeInit_FS(void)
 uint16_t MEM_If_Erase_FS(uint32_t Add)
 {
   /* USER CODE BEGIN 2 */ 
-  uint16_t result = USBD_FAIL;
-  HAL_StatusTypeDef halResult = HAL_OK;
+	  uint16_t result = USBD_FAIL;
+	  HAL_StatusTypeDef halResult = HAL_OK;
 
-  if((Add >= (DICEFLASHSTART + DICEBOOTLOADERSIZE)) &&
-     (Add < (DICEFLASHSTART + DICEFLASHSIZE)))
-  {
-      uint32_t PageError = 0;
-      FLASH_EraseInitTypeDef erase = {FLASH_TYPEERASE_PAGES, Add, 8};
-      for(uint32_t n = 0, halResult = HAL_BUSY; ((n < 10) && ((PageError != 0xffffffff) || (halResult != HAL_OK))); n++)
-      {
-          halResult = HAL_FLASHEx_Erase(&erase, &PageError);
-      }
-      if((PageError == 0xffffffff) && (halResult == HAL_OK))
-      {
-          result = USBD_OK;
-          goto Cleanup;
-      }
-  }
-  else if((!DICERAMAREA->info.properties.noClear) &&
-          (!__HAL_FIREWALL_IS_ENABLED()) &&
-          (Add >= (uint32_t)&DICEFUSEAREA->info) &&
-          ((Add + 256) < ((uint32_t)&DICEFUSEAREA->info + DICEFUSEDATASIZE)))
-  {
-      for(uint32_t n = 0; n < 256; n += sizeof(uint32_t))
-      {
-          for(uint32_t n = 0, halResult = HAL_BUSY; ((n < 10) && (halResult != HAL_OK)); n++)
-          {
-              if((halResult = HAL_FLASHEx_DATAEEPROM_Erase(Add + n)) != HAL_OK)
-              {
-                  result = USBD_FAIL;
-                  goto Cleanup;
-              }
-          }
-      }
-      result = USBD_OK;
-  }
+	  if((Add >= (DICEFLASHSTART + DICEBOOTLOADERSIZE)) &&
+	     (Add < (DICEFLASHSTART + DICEFLASHSIZE)))
+	  {
+	      uint32_t PageError = 0;
+	      FLASH_EraseInitTypeDef erase = {FLASH_TYPEERASE_PAGES, Add, 8};
+	      for(uint32_t n = 0, halResult = HAL_BUSY; ((n < 10) && ((PageError != 0xffffffff) || (halResult != HAL_OK))); n++)
+	      {
+	          halResult = HAL_FLASHEx_Erase(&erase, &PageError);
+	      }
+	      if((PageError == 0xffffffff) && (halResult == HAL_OK))
+	      {
+	          result = USBD_OK;
+	          goto Cleanup;
+	      }
+	  }
+	  else if((!DICERAMAREA->info.properties.noClear) &&
+	          (!__HAL_FIREWALL_IS_ENABLED()) &&
+	          (Add >= (uint32_t)&DICEFUSEAREA->info) &&
+	          ((Add + 256) < ((uint32_t)&DICEFUSEAREA->info + DICEFUSEDATASIZE)))
+	  {
+	      for(uint32_t n = 0; n < 256; n += sizeof(uint32_t))
+	      {
+	          for(uint32_t n = 0, halResult = HAL_BUSY; ((n < 10) && (halResult != HAL_OK)); n++)
+	          {
+	              if((halResult = HAL_FLASHEx_DATAEEPROM_Erase(Add + n)) != HAL_OK)
+	              {
+	                  result = USBD_FAIL;
+	                  goto Cleanup;
+	              }
+	          }
+	      }
+	      result = USBD_OK;
+	  }
 
-Cleanup:
-//  EPRINTF("INFO: MEM_If_Erase_FS(0x%08x) = %s\r\n", Add, (result==USBD_OK) ? "USBD_OK" : "USBD_FAIL");
-  if(result == USBD_OK)
-      EPRINTF("E");
-  else
-      EPRINTF(".");
-  return result;
+	Cleanup:
+	//  EPRINTF("INFO: MEM_If_Erase_FS(0x%08x) = %s\r\n", Add, (result==USBD_OK) ? "USBD_OK" : "USBD_FAIL");
+	  if(result == USBD_OK)
+	      EPRINTF("E");
+	  else
+	      EPRINTF(".");
+	  return result;
   /* USER CODE END 2 */ 
 }
 
@@ -246,43 +250,43 @@ Cleanup:
 uint16_t MEM_If_Write_FS(uint8_t *src, uint8_t *dest, uint32_t Len)
 {
   /* USER CODE BEGIN 3 */ 
-  uint16_t result = USBD_FAIL;
-  HAL_StatusTypeDef halResult = HAL_OK;
-    
-  for(uint32_t n = 0; n < Len; n += sizeof(uint32_t))
-  {
-      for(uint32_t m = 0, halResult = HAL_BUSY; ((m < 10) && (halResult == HAL_BUSY)); m++)
-      {
-          if(((uint32_t)dest >= (DICEFLASHSTART + DICEBOOTLOADERSIZE)) &&
-             ((uint32_t)dest < (DICEFLASHSTART + DICEFLASHSIZE)))
-          {
-              halResult = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, (uint32_t)&dest[n], *((uint32_t*)&src[n]));
-          }
-          else if((!DICERAMAREA->info.properties.noClear) &&
-                  (!__HAL_FIREWALL_IS_ENABLED()) &&
-                  ((uint32_t)dest >= (uint32_t)&DICEFUSEAREA->info) &&
-                  (((uint32_t)dest + Len) < ((uint32_t)&DICEFUSEAREA->info + DICEFUSEDATASIZE)))
-          {
-              halResult = HAL_FLASHEx_DATAEEPROM_Program(FLASH_TYPEPROGRAM_WORD, (uint32_t)&dest[n], *((uint32_t*)&src[n]));
-          }
-          if(*((uint32_t*)&src[n]) != *((uint32_t*)&dest[n]))
-          {
-              goto Cleanup;
-          }
-      }
-  }
-  if(halResult == HAL_OK)
-  {
-      result = USBD_OK;
-  }
+	  uint16_t result = USBD_FAIL;
+	  HAL_StatusTypeDef halResult = HAL_OK;
 
-Cleanup:
-//  EPRINTF("INFO: MEM_If_Write_FS(0x%08x, %d) = %s\r\n", (unsigned int)dest, Len, (result==USBD_OK) ? "USBD_OK" : "USBD_FAIL");
-  if(result == USBD_OK)
-      EPRINTF("W");
-  else
-      EPRINTF(".");
-  return result;
+	  for(uint32_t n = 0; n < Len; n += sizeof(uint32_t))
+	  {
+	      for(uint32_t m = 0, halResult = HAL_BUSY; ((m < 10) && (halResult == HAL_BUSY)); m++)
+	      {
+	          if(((uint32_t)dest >= (DICEFLASHSTART + DICEBOOTLOADERSIZE)) &&
+	             ((uint32_t)dest < (DICEFLASHSTART + DICEFLASHSIZE)))
+	          {
+	              halResult = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, (uint32_t)&dest[n], *((uint32_t*)&src[n]));
+	          }
+	          else if((!DICERAMAREA->info.properties.noClear) &&
+	                  (!__HAL_FIREWALL_IS_ENABLED()) &&
+	                  ((uint32_t)dest >= (uint32_t)&DICEFUSEAREA->info) &&
+	                  (((uint32_t)dest + Len) < ((uint32_t)&DICEFUSEAREA->info + DICEFUSEDATASIZE)))
+	          {
+	              halResult = HAL_FLASHEx_DATAEEPROM_Program(FLASH_TYPEPROGRAM_WORD, (uint32_t)&dest[n], *((uint32_t*)&src[n]));
+	          }
+	          if(*((uint32_t*)&src[n]) != *((uint32_t*)&dest[n]))
+	          {
+	              goto Cleanup;
+	          }
+	      }
+	  }
+	  if(halResult == HAL_OK)
+	  {
+	      result = USBD_OK;
+	  }
+
+	Cleanup:
+	//  EPRINTF("INFO: MEM_If_Write_FS(0x%08x, %d) = %s\r\n", (unsigned int)dest, Len, (result==USBD_OK) ? "USBD_OK" : "USBD_FAIL");
+	  if(result == USBD_OK)
+	      EPRINTF("W");
+	  else
+	      EPRINTF(".");
+	  return result;
   /* USER CODE END 3 */ 
 }
 
@@ -326,23 +330,23 @@ uint8_t *MEM_If_Read_FS (uint8_t *src, uint8_t *dest, uint32_t Len)
 uint16_t MEM_If_GetStatus_FS (uint32_t Add, uint8_t Cmd, uint8_t *buffer)
 {
   /* USER CODE BEGIN 5 */ 
-  switch (Cmd)
-  {
-  case DFU_MEDIA_PROGRAM:
-    buffer[1] = (uint8_t)FLASH_PROGRAM_TIME;
-    buffer[2] = (uint8_t)(FLASH_PROGRAM_TIME << 8);
-    buffer[3] = 0;  
-    break;
-    
-  case DFU_MEDIA_ERASE:
-  default:
-    buffer[1] = (uint8_t)FLASH_ERASE_TIME;
-    buffer[2] = (uint8_t)(FLASH_ERASE_TIME << 8);
-    buffer[3] = 0;
-    break;
-  } 
-//  EPRINTF("INFO: MEM_If_GetStatus_FS(0x%08x, %d, 0x%08x) = USBD_OK\r\n", Add, Cmd, (unsigned int)buffer);
-  return  (USBD_OK);
+	  switch (Cmd)
+	  {
+	  case DFU_MEDIA_PROGRAM:
+	    buffer[1] = (uint8_t)FLASH_PROGRAM_TIME;
+	    buffer[2] = (uint8_t)(FLASH_PROGRAM_TIME << 8);
+	    buffer[3] = 0;
+	    break;
+
+	  case DFU_MEDIA_ERASE:
+	  default:
+	    buffer[1] = (uint8_t)FLASH_ERASE_TIME;
+	    buffer[2] = (uint8_t)(FLASH_ERASE_TIME << 8);
+	    buffer[3] = 0;
+	    break;
+	  }
+	//  EPRINTF("INFO: MEM_If_GetStatus_FS(0x%08x, %d, 0x%08x) = USBD_OK\r\n", Add, Cmd, (unsigned int)buffer);
+	  return  (USBD_OK);
   /* USER CODE END 5 */  
 }
 
