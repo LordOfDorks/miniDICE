@@ -20,9 +20,9 @@
 <intAttribute key="com.atollic.hardwaredebug.launch.portNumber" value="2331"/>
 <stringAttribute key="com.atollic.hardwaredebug.launch.remoteCommand" value="target extended-remote"/>
 <stringAttribute key="com.atollic.hardwaredebug.launch.runCommands" value="# Default GDB command file (FLASH) for SEGGER J-LINK and STMicroelectronics STM32L082KZ microcontroller.&#10;&#10;# Set character encoding&#10;set host-charset CP1252&#10;set target-charset CP1252&#10;&#10;# Set JTAG speed to 30 kHz&#10;monitor speed 30&#10;&#10;# Set GDBServer to little endian&#10;monitor endian little&#10;&#10;# Reset the chip to get to a known state.&#10;monitor reset&#10;&#10;# Set auto JTAG speed&#10;monitor speed auto&#10;&#10;# Setup GDB FOR FASTER DOWNLOADS&#10;set remote memory-write-packet-size 1024&#10;set remote memory-write-packet-size fixed&#10;&#10;# Enable flash download&#10;monitor flash download = 1&#10;&#10;# Flash device&#10;monitor flash device = STM32L082KZ&#10;&#10;# Load the program executable&#10;load&#9;&#9;&#10;&#10;# Reset the chip to get to a known state. Remove &quot;monitor reset&quot; command &#10;#  if the code is not located at default address and does not run by reset. &#10;monitor reset&#10;# Set a breakpoint at main().&#10;tbreak main&#10;&#10;# Run to the breakpoint.&#10;continue"/>
-<stringAttribute key="com.atollic.hardwaredebug.launch.serverParam" value="-port 2331 -s -CPU Cortex-M -device STM32L082KZ -endian little -speed 2000 -if swd -vd"/>
+<stringAttribute key="com.atollic.hardwaredebug.launch.serverParam" value="-port 2331 -s -CPU Cortex-M -device STM32L082KZ -endian little -speed 2000 -vd"/>
 <booleanAttribute key="com.atollic.hardwaredebug.launch.startServer" value="false"/>
-<booleanAttribute key="com.atollic.hardwaredebug.launch.swd_mode" value="true"/>
+<booleanAttribute key="com.atollic.hardwaredebug.launch.swd_mode" value="false"/>
 <stringAttribute key="com.atollic.hardwaredebug.launch.swv_port" value="2332"/>
 <stringAttribute key="com.atollic.hardwaredebug.launch.swv_trace_div" value="0"/>
 <stringAttribute key="com.atollic.hardwaredebug.launch.swv_trace_hclk" value="8000000"/>
@@ -50,6 +50,6 @@
 <listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_TYPES">
 <listEntry value="4"/>
 </listAttribute>
-<stringAttribute key="org.eclipse.dsf.launch.MEMORY_BLOCKS" value="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; standalone=&quot;no&quot;?&gt;&#13;&#10;&lt;memoryBlockExpressionList context=&quot;reserved-for-future-use&quot;&gt;&#13;&#10;&lt;gdbmemoryBlockExpression address=&quot;536871236&quot; label=&quot;pubKey-&amp;gt;x.data&quot;/&gt;&#13;&#10;&lt;/memoryBlockExpressionList&gt;&#13;&#10;"/>
+<stringAttribute key="org.eclipse.dsf.launch.MEMORY_BLOCKS" value="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; standalone=&quot;no&quot;?&gt;&#13;&#10;&lt;memoryBlockExpressionList context=&quot;reserved-for-future-use&quot;&gt;&#13;&#10;&lt;gdbmemoryBlockExpression address=&quot;536880128&quot; label=&quot;&amp;amp;staging-&amp;gt;info.properties&quot;/&gt;&#13;&#10;&lt;/memoryBlockExpressionList&gt;&#13;&#10;"/>
 <stringAttribute key="process_factory_id" value="org.eclipse.cdt.dsf.gdb.GdbProcessFactory"/>
 </launchConfiguration>

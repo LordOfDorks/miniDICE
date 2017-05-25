@@ -402,119 +402,6 @@ void SignDiceIdentityPackage(
         retVal = CryptStringToBinaryA(encDevCert.c_str(), encDevCert.size(), CRYPT_STRING_BASE64HEADER, rawCert.data(), &result, NULL, NULL);
 
         std::vector<BYTE> newCert = IssueDeviceCertificate(rawCert, deviceAuthCert, dwKeySpec, deviceAuth);
-        //if ((devCert = CertCreateCertificateContext(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, rawCert.data(), rawCert.size())) == NULL)
-        //{
-        //    throw retVal;
-        //}
-        //if (!CryptImportPublicKeyInfoEx2(X509_ASN_ENCODING, &devCert->pCertInfo->SubjectPublicKeyInfo, 0, NULL, &devPub))
-        //{
-        //    throw DICE_INVALID_PARAMETER;
-        //}
-        //DWORD validityFlags = CERT_STORE_SIGNATURE_FLAG | CERT_STORE_TIME_VALIDITY_FLAG;
-        //if (!CertVerifySubjectCertificateContext(devCert, devCert, &validityFlags))
-        //{
-        //    throw DICE_INVALID_PARAMETER;
-        //}
-
-        //// Create the new device certificate to issue
-        //CERT_INFO certInfo = { 0 };
-        //certInfo.dwVersion = CERT_V3;
-        //certInfo.SerialNumber.cbData = 16;
-        //std::vector<BYTE> certSerial(certInfo.SerialNumber.cbData, 0);
-        //certInfo.SerialNumber.pbData = certSerial.data();
-        //if((retVal = BCryptGenRandom(hRng, certSerial.data(), certSerial.size(), 0)) != 0)
-        //{
-        //    throw retVal;
-        //}
-        //certInfo.SignatureAlgorithm.pszObjId = szOID_ECDSA_SHA256;
-        //certInfo.Issuer.cbData = deviceAuthCert->pCertInfo->Issuer.cbData;
-        //certInfo.Issuer.pbData = deviceAuthCert->pCertInfo->Issuer.pbData;
-        //certInfo.Subject.cbData = devCert->pCertInfo->Subject.cbData;
-        //certInfo.Subject.pbData = devCert->pCertInfo->Subject.pbData;
-        //SYSTEMTIME systemTime;
-        //GetSystemTime(&systemTime);
-        //SystemTimeToFileTime(&systemTime, &certInfo.NotBefore);
-        //systemTime.wYear += 20;
-        //SystemTimeToFileTime(&systemTime, &certInfo.NotAfter);
-        //certInfo.SubjectPublicKeyInfo = devCert->pCertInfo->SubjectPublicKeyInfo;
-        //certInfo.cExtension = devCert->pCertInfo->cExtension;
-        //certInfo.rgExtension = devCert->pCertInfo->rgExtension;
-        //for (UINT32 n = 0; n < certInfo.cExtension; n++)
-        //{
-        //    if (!strcmp(certInfo.rgExtension[n].pszObjId, szOID_AUTHORITY_KEY_IDENTIFIER))
-        //    {
-        //        // Find the authority's key identifier
-        //        std::vector<BYTE> authorityKeyId;
-        //        CERT_AUTHORITY_KEY_ID_INFO keyIdInfo = { 0 };
-        //        keyIdInfo.CertSerialNumber.cbData = deviceAuthCert->pCertInfo->SerialNumber.cbData;
-        //        keyIdInfo.CertSerialNumber.pbData = deviceAuthCert->pCertInfo->SerialNumber.pbData;
-        //        keyIdInfo.CertIssuer.cbData = deviceAuthCert->pCertInfo->Issuer.cbData;
-        //        keyIdInfo.CertIssuer.pbData = deviceAuthCert->pCertInfo->Issuer.pbData;
-
-        //        for (UINT32 m = 0; m < deviceAuthCert->pCertInfo->cExtension; m++)
-        //        {
-        //            if (!strcmp(deviceAuthCert->pCertInfo->rgExtension[m].pszObjId, szOID_SUBJECT_KEY_IDENTIFIER))
-        //            {
-        //                CRYPT_DIGEST_BLOB keyId = {0};
-        //                DWORD keyidSize = sizeof(keyId);
-        //                if (!CryptDecodeObject(X509_ASN_ENCODING,
-        //                                       deviceAuthCert->pCertInfo->rgExtension[m].pszObjId,
-        //                                       deviceAuthCert->pCertInfo->rgExtension[m].Value.pbData,
-        //                                       deviceAuthCert->pCertInfo->rgExtension[m].Value.cbData,
-        //                                       CRYPT_DECODE_NOCOPY_FLAG,
-        //                                       &keyId, &keyidSize))
-        //                {
-        //                    throw GetLastError();
-        //                }
-        //                authorityKeyId.resize(keyId.cbData);
-        //                keyIdInfo.KeyId.cbData = (UINT32)authorityKeyId.size();
-        //                keyIdInfo.KeyId.pbData = authorityKeyId.data();
-        //                memcpy(keyIdInfo.KeyId.pbData, keyId.pbData, keyIdInfo.KeyId.cbData);
-        //                break;
-        //            }
-        //        }
-        //        if (!CryptEncodeObjectEx(X509_ASN_ENCODING,
-        //            X509_AUTHORITY_KEY_ID,
-        //            &keyIdInfo,
-        //            CRYPT_ENCODE_ALLOC_FLAG,
-        //            NULL,
-        //            &certInfo.rgExtension[n].Value.pbData,
-        //            &certInfo.rgExtension[n].Value.cbData))
-        //        {
-        //            throw GetLastError();
-        //        }
-        //        break;
-        //    }
-        //}
-
-        //// Issue the new certificate
-        //result = 0;
-        //CRYPT_ALGORITHM_IDENTIFIER certAlgId = { szOID_ECDSA_SHA256,{ 0, NULL } };
-        //if (!CryptSignAndEncodeCertificate(deviceAuth,
-        //    dwKeySpec,
-        //    X509_ASN_ENCODING,
-        //    X509_CERT_TO_BE_SIGNED,
-        //    &certInfo,
-        //    &certAlgId,
-        //    NULL,
-        //    NULL,
-        //    &result))
-        //{
-        //    throw GetLastError();
-        //}
-        //std::vector<BYTE> newCert(result, 0);
-        //if (!CryptSignAndEncodeCertificate(deviceAuth,
-        //    dwKeySpec,
-        //    X509_ASN_ENCODING,
-        //    X509_CERT_TO_BE_SIGNED,
-        //    &certInfo,
-        //    &certAlgId,
-        //    NULL,
-        //    newCert.data(),
-        //    &result))
-        //{
-        //    throw GetLastError();
-        //}
 
         // Store a copy of the new cert on the disk
         fileName = fileName.substr(0, fileName.size() - 4) + std::wstring(L"-Auth") + fileName.substr(dfuFileName.size() - 4);
@@ -543,6 +430,10 @@ void SignDiceIdentityPackage(
             throw retVal;
         }
         if ((retVal = STDFUFILES_SetImageElement(hImage, 0, true, dfuImageElement)) != STDFUFILES_NOERROR)
+        {
+            throw retVal;
+        }
+        if ((retVal = STDFUFILES_SetImageName(hImage, "DiceID")) != STDFUFILES_NOERROR)
         {
             throw retVal;
         }

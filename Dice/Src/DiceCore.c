@@ -145,6 +145,7 @@ DICE_STATUS DiceInitialize(void)
     DICE_STATUS retVal = DICE_SUCCESS;
     bigval_t seed = {0};
 
+    EPRINTF("INFO: Initializing.\r\n");
     if(__HAL_FIREWALL_IS_ENABLED())
     {
         EPRINTF("ERROR: Firewall already engaged!\r\n");
@@ -155,6 +156,7 @@ DICE_STATUS DiceInitialize(void)
     // Initial Device Identity Provisioning
     if((manualReprovision) || (DICEFUSEAREA->magic != DICEMAGIC))
     {
+        EPRINTF("INFO: Generating new identity\r\n");
         // Initilaize the staging area
         uint32_t* stagingBuffer = (uint32_t*)malloc(DICEFUSEDATASIZE);
         if(stagingBuffer == NULL)
@@ -163,6 +165,7 @@ DICE_STATUS DiceInitialize(void)
             retVal = DICE_FAILURE;
             goto Cleanup;
         }
+        memset(stagingBuffer, 0x00, DICEFUSEDATASIZE);
         PDicePersistedData_t staging = (PDicePersistedData_t)stagingBuffer;
         staging->magic = DICEMAGIC;
         staging->info.magic = DICEMAGIC;
