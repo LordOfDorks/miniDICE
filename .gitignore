@@ -2,6 +2,7 @@
 *.p7b
 *.pem
 *.exe
+*.csv
 *.sdf
 *.enc
 *.vc.db

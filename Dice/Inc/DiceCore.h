@@ -6,12 +6,9 @@
 #include "DiceStatus.h"
 #include "DiceDerEnc.h"
 
-#define DICEVERSION                 (0x00010003)
-#define DICETIMESTAMP               (1492105873)
-//#define DICEDATE                    "170412000000Z"
+#define DICEVERSION                 (0x00010004)
+#define DICETIMESTAMP               (1502841825)
 #define DICEMAGIC                   (0x45434944) //'DICE'
-//#define DICEPROVISIONEDID           (0x44494345) //'ECID'
-//#define DICEMARKER                  (0x4B52414D45434944)
 #ifndef SILENTDICE
 #define DICEBOOTLOADERSIZE          (0x00010000)
 #else
@@ -36,7 +33,6 @@
 #define DICEAPPENTRY                (DICEFLASHSTART + DICEBOOTLOADERSIZE + sizeof(DiceEmbeddedSignature_t))
 #define DICEAPPMAXSIZE              (DICEFLASHSIZE - DICEBOOTLOADERSIZE)
 #define DICEWIPERAMSTARTOFFSET      (sizeof(DiceData_t) - 1 + DICERAMAREA->info.certBagLen)
-//#define DICEWIPERAMSIZE             (DICERAMSIZE - DICEWIPERAMSTART)
 #define DICECOMPOUNDDERIVATIONLABEL "DiceCompoundKey"
 
 #define DICEBLINKERROR              (1)

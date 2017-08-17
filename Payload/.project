@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
 	<name>Payload</name>
-	<comment />
+	<comment></comment>
 	<projects>
 	</projects>
 	<buildSpec>
@@ -15,7 +15,7 @@
 				</dictionary>
 				<dictionary>
 					<key>?name?</key>
-					<value />
+					<value></value>
 				</dictionary>
 				<dictionary>
 					<key>org.eclipse.cdt.make.core.append_environment</key>
@@ -23,7 +23,7 @@
 				</dictionary>
 				<dictionary>
 					<key>org.eclipse.cdt.make.core.buildArguments</key>
-					<value />
+					<value></value>
 				</dictionary>
 				<dictionary>
 					<key>org.eclipse.cdt.make.core.buildCommand</key>
@@ -79,7 +79,7 @@
 		<link>
 			<name>Middlewares/DICE/DiceHelper.c</name>
 			<type>1</type>
-			<location>D:/TrueStudio/miniDICE/Dice/Src/DiceHelper.c</location>
+			<locationURI>PARENT-1-PROJECT_LOC/dice/src/DiceHelper.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

@@ -93,6 +93,18 @@ uint32_t GetTimeStamp(
     return convert.LowPart;
 }
 
+FILETIME ConvertWinTimeStamp(
+    UINT32 timeStamp
+)
+{
+    LARGE_INTEGER convert = {0};
+    convert.QuadPart = ((LONGLONG)timeStamp * 10000000) + (LONGLONG)(11644473600000 * 10000);
+    FILETIME out = {0};
+    out.dwLowDateTime = convert.LowPart;
+    out.dwHighDateTime = convert.HighPart;
+    return out;
+}
+
 void PrintAppInfo(PDiceEmbeddedSignature_t sigHdr)
 {
     printf("AppName:          %s\n", sigHdr->s.sign.name);
@@ -172,7 +184,8 @@ std::vector<BYTE> IssueDeviceCertificate(
     std::vector<BYTE> derDevCert,
     PCCERT_CONTEXT deviceAuthCert,
     DWORD dwKeySpec,
-    HCRYPTPROV_OR_NCRYPT_KEY_HANDLE deviceAuth
+    HCRYPTPROV_OR_NCRYPT_KEY_HANDLE deviceAuth,
+    PCCERT_CONTEXT appAuthCert
 )
 {
     std::exception_ptr pendingException = NULL;
@@ -227,8 +240,57 @@ std::vector<BYTE> IssueDeviceCertificate(
     systemTime.wYear += 20;
     SystemTimeToFileTime(&systemTime, &certInfo.NotAfter);
     certInfo.SubjectPublicKeyInfo = devCert->pCertInfo->SubjectPublicKeyInfo;
-    certInfo.cExtension = devCert->pCertInfo->cExtension;
-    certInfo.rgExtension = devCert->pCertInfo->rgExtension;
+
+    std::vector<byte> extensionTbl;
+    if (appAuthCert)
+    {
+        std::vector<BYTE> authorityKeyId;
+        CERT_AUTHORITY_KEY_ID_INFO keyIdInfo = { 0 };
+
+        certInfo.cExtension = devCert->pCertInfo->cExtension + 1;
+        extensionTbl = std::vector<byte>(sizeof(CERT_EXTENSION) * certInfo.cExtension, 0);
+        certInfo.rgExtension = (PCERT_EXTENSION)extensionTbl.data();
+        for (UINT32 n = 0; n < devCert->pCertInfo->cExtension; n++)
+        {
+            certInfo.rgExtension[n] = devCert->pCertInfo->rgExtension[n];
+        }
+
+        // Generate the codeAuthority extension under diceAppAuthorityOID 1.3.6.1.4.1.311.89.3.1.5
+        certInfo.rgExtension[certInfo.cExtension - 1].pszObjId = "1.3.6.1.4.1.311.89.3.1.5";
+        certInfo.rgExtension[certInfo.cExtension - 1].fCritical = false;
+        certInfo.rgExtension[certInfo.cExtension - 1].Value.cbData = 0;
+        certInfo.rgExtension[certInfo.cExtension - 1].Value.pbData = NULL;
+
+        // Create the X509_AUTHORITY_KEY_ID for the appAuthority
+        keyIdInfo.CertSerialNumber.cbData = appAuthCert->pCertInfo->SerialNumber.cbData;
+        keyIdInfo.CertSerialNumber.pbData = appAuthCert->pCertInfo->SerialNumber.pbData;
+        keyIdInfo.CertIssuer.cbData = appAuthCert->pCertInfo->Subject.cbData;
+        keyIdInfo.CertIssuer.pbData = appAuthCert->pCertInfo->Subject.pbData;
+        for (UINT32 n = 0; n < appAuthCert->pCertInfo->cExtension; n++)
+        {
+            if (!strcmp(appAuthCert->pCertInfo->rgExtension[n].pszObjId, szOID_SUBJECT_KEY_IDENTIFIER))
+            {
+                keyIdInfo.KeyId.cbData = appAuthCert->pCertInfo->rgExtension[n].Value.cbData;
+                keyIdInfo.KeyId.pbData = appAuthCert->pCertInfo->rgExtension[n].Value.pbData;
+                break;
+            }
+        }
+        if (!CryptEncodeObjectEx(X509_ASN_ENCODING,
+            X509_AUTHORITY_KEY_ID,
+            &keyIdInfo,
+            CRYPT_ENCODE_ALLOC_FLAG,
+            NULL,
+            &certInfo.rgExtension[certInfo.cExtension - 1].Value.pbData,
+            &certInfo.rgExtension[certInfo.cExtension - 1].Value.cbData))
+        {
+            throw GetLastError();
+        }
+    }
+    else
+    {
+        certInfo.cExtension = devCert->pCertInfo->cExtension;
+        certInfo.rgExtension = devCert->pCertInfo->rgExtension;
+    }
     for (UINT32 n = 0; n < certInfo.cExtension; n++)
     {
         if (!strcmp(certInfo.rgExtension[n].pszObjId, szOID_AUTHORITY_KEY_IDENTIFIER))
@@ -309,12 +371,300 @@ std::vector<BYTE> IssueDeviceCertificate(
     return newCert;
 }
 
+void LogDeviceIdentity(
+    std::vector<BYTE> newCert
+)
+{
+    uint32_t retVal = 0;
+    std::vector<BYTE> derCert;
+    std::string logLine;
+    PCCERT_CONTEXT hCert = NULL;
+    DWORD result;
+
+    if (CryptStringToBinaryA((LPSTR)newCert.data(), newCert.size(), CRYPT_STRING_BASE64HEADER, NULL, &result, NULL, NULL))
+    {
+        derCert.resize(result);
+        if (!CryptStringToBinaryA((LPSTR)newCert.data(), newCert.size(), CRYPT_STRING_BASE64HEADER, derCert.data(), &result, NULL, NULL))
+        {
+            throw GetLastError();
+        }
+    }
+    else
+    {
+        derCert = newCert;
+    }
+    if ((hCert = CertCreateCertificateContext(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, derCert.data(), derCert.size())) == NULL)
+    {
+        throw retVal;
+    }
+    DWORD required = 0;
+    std::vector<BYTE> dataVal;
+    std::string dataStr;
+
+    //DeviceCertKeyID
+    required = 0;
+    dataStr.clear();
+    for (UINT32 n = 0; n < hCert->pCertInfo->cExtension; n++)
+    {
+        if (!strcmp(hCert->pCertInfo->rgExtension[n].pszObjId, szOID_SUBJECT_KEY_IDENTIFIER))
+        {
+            required = 0;
+            if (!CryptDecodeObject(X509_ASN_ENCODING, szOID_SUBJECT_KEY_IDENTIFIER, hCert->pCertInfo->rgExtension[n].Value.pbData, hCert->pCertInfo->rgExtension[n].Value.cbData, CRYPT_DECODE_NOCOPY_FLAG, NULL, &required))
+            {
+                throw GetLastError();
+            }
+            dataVal.resize(required);
+            if (!CryptDecodeObject(X509_ASN_ENCODING, szOID_SUBJECT_KEY_IDENTIFIER, hCert->pCertInfo->rgExtension[n].Value.pbData, hCert->pCertInfo->rgExtension[n].Value.cbData, CRYPT_DECODE_NOCOPY_FLAG, dataVal.data(), &required))
+            {
+                throw GetLastError();
+            }
+            PCRYPT_INTEGER_BLOB keyId = (PCRYPT_INTEGER_BLOB)dataVal.data();
+            dataStr.resize(keyId->cbData * 2 + 1);
+            for (UINT32 m = 0; m < keyId->cbData; m++)
+            {
+                sprintf((char*)&dataStr.c_str()[m * 2], "%02x", keyId->pbData[m]);
+            }
+            dataStr.resize(keyId->cbData * 2);
+            logLine += "0x" + dataStr + ", ";
+            break;
+        }
+    }
+
+    //DeviceCertSubjectName
+    required = 0;
+    dataStr.clear();
+    if (!CryptDecodeObject(X509_ASN_ENCODING, X509_NAME, hCert->pCertInfo->Subject.pbData, hCert->pCertInfo->Subject.cbData, CRYPT_DECODE_NOCOPY_FLAG, NULL, &required))
+    {
+        throw GetLastError();
+    }
+    dataVal.resize(required);
+    if (!CryptDecodeObject(X509_ASN_ENCODING, X509_NAME, hCert->pCertInfo->Subject.pbData, hCert->pCertInfo->Subject.cbData, CRYPT_DECODE_NOCOPY_FLAG, dataVal.data(), &required))
+    {
+        throw GetLastError();
+    }
+    PCERT_NAME_INFO nameInfo = (PCERT_NAME_INFO)dataVal.data();
+    for (UINT32 n = 0; n < nameInfo->cRDN; n++)
+    {
+        if (n > 0)
+        {
+            dataStr += " ";
+        }
+        for (UINT32 m = 0; m < nameInfo->rgRDN[n].cRDNAttr; m++)
+        {
+            if(!strcmp(nameInfo->rgRDN[n].rgRDNAttr[m].pszObjId, szOID_COMMON_NAME))
+            {
+                dataStr += "CN=";
+            }
+            else if(!strcmp(nameInfo->rgRDN[n].rgRDNAttr[m].pszObjId, szOID_ORGANIZATION_NAME))
+            {
+                dataStr += "O=";
+            }
+            else if (!strcmp(nameInfo->rgRDN[n].rgRDNAttr[m].pszObjId, szOID_COUNTRY_NAME))
+            {
+                dataStr += "C=";
+            }
+            else
+            {
+                dataStr += nameInfo->rgRDN[n].rgRDNAttr[m].pszObjId;
+            }
+            std::string name(nameInfo->rgRDN[n].rgRDNAttr[m].Value.cbData, 0);
+            WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, (LPWCH)nameInfo->rgRDN[n].rgRDNAttr[m].Value.pbData, nameInfo->rgRDN[n].rgRDNAttr[m].Value.cbData, (LPSTR)name.c_str(), name.size(), NULL, NULL);
+            name.resize(strlen(name.c_str()));
+            dataStr += name;
+        }
+    }
+    logLine += dataStr + ", ";
+
+    //DeviceCertSerial
+    dataStr.clear();
+    dataStr.resize(hCert->pCertInfo->SerialNumber.cbData * 2 + 1);
+    for (UINT32 n = 0; n < hCert->pCertInfo->SerialNumber.cbData; n++)
+    {
+        sprintf((char*)&dataStr.c_str()[n * 2], "%02x", hCert->pCertInfo->SerialNumber.pbData[n]);
+    }
+    dataStr.resize(hCert->pCertInfo->SerialNumber.cbData * 2);
+    logLine += "0x" + dataStr + ", ";
+
+    //DeviceCertThumbprint
+    dataStr.clear();
+    dataVal = CertThumbPrint(hCert);
+    dataStr.resize(dataVal.size() * 2 + 1);
+    for (UINT32 n = 0; n < dataVal.size(); n++)
+    {
+        sprintf((char*)&dataStr.c_str()[n * 2], "%02x", dataVal.data()[n]);
+    }
+    dataStr.resize(dataVal.size() * 2);
+    logLine += "0x" + dataStr + ", ";
+
+    //DiceVersion
+    required = 0;
+    dataStr.clear();
+    for (UINT32 n = 0; n < hCert->pCertInfo->cExtension; n++)
+    {
+        if (!strcmp(hCert->pCertInfo->rgExtension[n].pszObjId, "1.3.6.1.4.1.311.89.3.1.2")) //diceVersionOID
+        {
+            INT32 version = 0;
+            required = sizeof(INT32);
+            if (!CryptDecodeObject(X509_ASN_ENCODING, X509_INTEGER, hCert->pCertInfo->rgExtension[n].Value.pbData, hCert->pCertInfo->rgExtension[n].Value.cbData, CRYPT_DECODE_NOCOPY_FLAG, &version, &required))
+            {
+                throw GetLastError();
+            }
+            dataStr.resize(10);
+            sprintf((char*)dataStr.c_str(), "%d.%d", version >> 16, version & 0x0000ffff);
+            dataStr.resize(strlen(dataStr.c_str()));
+            logLine += dataStr + ", ";
+            break;
+        }
+    }
+
+    //DiceTimeStamp
+    required = 0;
+    dataStr.clear();
+    for (UINT32 n = 0; n < hCert->pCertInfo->cExtension; n++)
+    {
+        if (!strcmp(hCert->pCertInfo->rgExtension[n].pszObjId, "1.3.6.1.4.1.311.89.3.1.3")) //diceTimeStampOID
+        {
+            FILETIME timeStamp = {0};
+            required = sizeof(FILETIME);
+            if (!CryptDecodeObject(X509_ASN_ENCODING, PKCS_UTC_TIME, hCert->pCertInfo->rgExtension[n].Value.pbData, hCert->pCertInfo->rgExtension[n].Value.cbData, CRYPT_DECODE_NOCOPY_FLAG, &timeStamp, &required))
+            {
+                throw GetLastError();
+            }
+            SYSTEMTIME timeData;
+            if (!FileTimeToSystemTime(&timeStamp, &timeData))
+            {
+                throw GetLastError();
+            }
+            dataStr.resize(60);
+            sprintf((char*)dataStr.c_str(), "%04d.%02d.%02d-%02d:%02d:%02d", timeData.wYear, timeData.wMonth, timeData.wDay, timeData.wHour, timeData.wMinute, timeData.wSecond);
+            dataStr.resize(strlen(dataStr.c_str()));
+            logLine += dataStr + ", ";
+            break;
+        }
+    }
+
+    //DiceIssueDate
+    SYSTEMTIME timeData;
+    if (!FileTimeToSystemTime(&hCert->pCertInfo->NotBefore, &timeData))
+    {
+        throw GetLastError();
+    }
+    dataStr.resize(60);
+    sprintf((char*)dataStr.c_str(), "%04d.%02d.%02d-%02d:%02d:%02d", timeData.wYear, timeData.wMonth, timeData.wDay, timeData.wHour, timeData.wMinute, timeData.wSecond);
+    dataStr.resize(strlen(dataStr.c_str()));
+    logLine += dataStr + ", ";
+
+    // Get AppAuthority
+    dataStr.clear();
+    std::vector<BYTE> appAuthData;
+    for (UINT32 n = 0; n < hCert->pCertInfo->cExtension; n++)
+    {
+        if (!strcmp(hCert->pCertInfo->rgExtension[n].pszObjId, "1.3.6.1.4.1.311.89.3.1.5")) //diceAppAuthorityOID
+        {
+            required = 0;
+            if (!CryptDecodeObject(X509_ASN_ENCODING, szOID_AUTHORITY_KEY_IDENTIFIER, hCert->pCertInfo->rgExtension[n].Value.pbData, hCert->pCertInfo->rgExtension[n].Value.cbData, CRYPT_DECODE_NOCOPY_FLAG, NULL, &required))
+            {
+                throw GetLastError();
+            }
+            appAuthData.resize(required);
+            if (!CryptDecodeObject(X509_ASN_ENCODING, szOID_AUTHORITY_KEY_IDENTIFIER, hCert->pCertInfo->rgExtension[n].Value.pbData, hCert->pCertInfo->rgExtension[n].Value.cbData, CRYPT_DECODE_NOCOPY_FLAG, appAuthData.data(), &required))
+            {
+                throw GetLastError();
+            }
+        }
+    }
+    PCERT_AUTHORITY_KEY_ID_INFO appAuth = (PCERT_AUTHORITY_KEY_ID_INFO)appAuthData.data();
+    //AppAuthorityCertKeyID
+    required = 0;
+    if (!CryptDecodeObject(X509_ASN_ENCODING, szOID_SUBJECT_KEY_IDENTIFIER, appAuth->KeyId.pbData, appAuth->KeyId.cbData, CRYPT_DECODE_NOCOPY_FLAG, NULL, &required))
+    {
+        throw GetLastError();
+    }
+    dataVal.resize(required);
+    if (!CryptDecodeObject(X509_ASN_ENCODING, szOID_SUBJECT_KEY_IDENTIFIER, appAuth->KeyId.pbData, appAuth->KeyId.cbData, CRYPT_DECODE_NOCOPY_FLAG, dataVal.data(), &required))
+    {
+        throw GetLastError();
+    }
+    PCRYPT_INTEGER_BLOB keyId = (PCRYPT_INTEGER_BLOB)dataVal.data();
+    dataStr.resize(keyId->cbData * 2 + 1);
+    for (UINT32 m = 0; m < keyId->cbData; m++)
+    {
+        sprintf((char*)&dataStr.c_str()[m * 2], "%02x", keyId->pbData[m]);
+    }
+    dataStr.resize(keyId->cbData * 2);
+    logLine += "0x" + dataStr + ", ";
+
+    //AppAuthorityCertSubjectName
+    required = 0;
+    dataStr.clear();
+    if (!CryptDecodeObject(X509_ASN_ENCODING, X509_NAME, appAuth->CertIssuer.pbData, appAuth->CertIssuer.cbData, CRYPT_DECODE_NOCOPY_FLAG, NULL, &required))
+    {
+        throw GetLastError();
+    }
+    dataVal.resize(required);
+    if (!CryptDecodeObject(X509_ASN_ENCODING, X509_NAME, appAuth->CertIssuer.pbData, appAuth->CertIssuer.cbData, CRYPT_DECODE_NOCOPY_FLAG, dataVal.data(), &required))
+    {
+        throw GetLastError();
+    }
+    nameInfo = (PCERT_NAME_INFO)dataVal.data();
+    for (UINT32 n = 0; n < nameInfo->cRDN; n++)
+    {
+        if (n > 0)
+        {
+            dataStr += " ";
+        }
+        for (UINT32 m = 0; m < nameInfo->rgRDN[n].cRDNAttr; m++)
+        {
+            if (!strcmp(nameInfo->rgRDN[n].rgRDNAttr[m].pszObjId, szOID_COMMON_NAME))
+            {
+                dataStr += "CN=";
+            }
+            else if (!strcmp(nameInfo->rgRDN[n].rgRDNAttr[m].pszObjId, szOID_ORGANIZATION_NAME))
+            {
+                dataStr += "O=";
+            }
+            else if (!strcmp(nameInfo->rgRDN[n].rgRDNAttr[m].pszObjId, szOID_COUNTRY_NAME))
+            {
+                dataStr += "C=";
+            }
+            else
+            {
+                dataStr += nameInfo->rgRDN[n].rgRDNAttr[m].pszObjId;
+            }
+            std::string name(nameInfo->rgRDN[n].rgRDNAttr[m].Value.cbData, 0);
+            WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, (LPWCH)nameInfo->rgRDN[n].rgRDNAttr[m].Value.pbData, nameInfo->rgRDN[n].rgRDNAttr[m].Value.cbData, (LPSTR)name.c_str(), name.size(), NULL, NULL);
+            name.resize(strlen(name.c_str()));
+            dataStr += name;
+        }
+    }
+    logLine += dataStr + ", ";
+
+    //AppAuthorityCertSerial
+    dataStr.clear();
+    dataStr.resize(appAuth->CertSerialNumber.cbData * 2 + 1);
+    for (UINT32 n = 0; n < appAuth->CertSerialNumber.cbData; n++)
+    {
+        sprintf((char*)&dataStr.c_str()[n * 2], "%02x", appAuth->CertSerialNumber.pbData[n]);
+    }
+    dataStr.resize(appAuth->CertSerialNumber.cbData * 2);
+    logLine += "0x" + dataStr;
+
+    logLine += "\n";
+    std::unique_ptr<std::remove_pointer<HANDLE>::type, decltype(&::CloseHandle)> hFile(::CreateFile(L"DiceDeviceTable.csv", GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL), &::CloseHandle);
+    DWORD bytesWritten = 0;
+    SetFilePointer(hFile.get(), 0, NULL, FILE_END);
+    if (!WriteFile(hFile.get(), logLine.c_str(), logLine.size(), &bytesWritten, NULL))
+    {
+        throw GetLastError();
+    }
+}
+
 void SignDiceIdentityPackage(
     std::wstring fileName,
     PCCERT_CONTEXT deviceAuthCert,
     DWORD dwKeySpec,
     HCRYPTPROV_OR_NCRYPT_KEY_HANDLE deviceAuth,
-    BCRYPT_KEY_HANDLE codeAuth,
+    PCCERT_CONTEXT appAuthCert,
     BOOL noClear,
     UINT32 rollBack
 )
@@ -332,6 +682,7 @@ void SignDiceIdentityPackage(
     DWORD result;
     PBYTE pbEncAuthorityKeyInfo = NULL;
     DWORD cbEncAuthorityKeyInfo = 0;
+    BCRYPT_KEY_HANDLE codeAuth = NULL;
 
     try
     { 
@@ -376,8 +727,12 @@ void SignDiceIdentityPackage(
         PDicePublicInfo_t dicePublic = (PDicePublicInfo_t)image.data();
         dicePublic->properties.noClear = noClear ? 1 : 0;
         if(rollBack != -1) dicePublic->rollBackProtection = rollBack;
-        if(codeAuth)
+        if(appAuthCert)
         {
+            if (!CryptImportPublicKeyInfoEx2(X509_ASN_ENCODING, &appAuthCert->pCertInfo->SubjectPublicKeyInfo, 0, NULL, &codeAuth))
+            {
+                throw DICE_INVALID_PARAMETER;
+            }
             if ((retVal = BCryptExportKey(codeAuth, NULL, BCRYPT_ECCPUBLIC_BLOB, NULL, 0, &result, 0)) != 0)
             {
                 throw retVal;
@@ -401,7 +756,7 @@ void SignDiceIdentityPackage(
         std::vector<BYTE> rawCert(result, 0);
         retVal = CryptStringToBinaryA(encDevCert.c_str(), encDevCert.size(), CRYPT_STRING_BASE64HEADER, rawCert.data(), &result, NULL, NULL);
 
-        std::vector<BYTE> newCert = IssueDeviceCertificate(rawCert, deviceAuthCert, dwKeySpec, deviceAuth);
+        std::vector<BYTE> newCert = IssueDeviceCertificate(rawCert, deviceAuthCert, dwKeySpec, deviceAuth, appAuthCert);
 
         // Store a copy of the new cert on the disk
         fileName = fileName.substr(0, fileName.size() - 4) + std::wstring(L"-Auth") + fileName.substr(dfuFileName.size() - 4);
@@ -446,10 +801,16 @@ void SignDiceIdentityPackage(
         {
             throw retVal;
         }
+        LogDeviceIdentity(newCert);
     }
     catch (const std::exception& e)
     {
         pendingException = std::current_exception();
+    }
+
+    if (codeAuth)
+    {
+        BCryptDestroyKey(codeAuth);
     }
 
     if (hImage != INVALID_HANDLE_VALUE)
@@ -590,25 +951,33 @@ void ExportDiceCertificatePackage(
 
 void CreateDiceApplication(
     std::wstring fileName,
-    HCRYPTPROV_OR_NCRYPT_KEY_HANDLE codeAuth,
+    std::wstring logTableName,
+    PCCERT_CONTEXT appAuthCert,
     std::vector<BYTE> alternateDigest,
     uint32_t version,
     uint32_t timeStamp
 )
 {
     DWORD retVal = STDFUFILES_NOERROR;
+    DWORD dwKeySpec;
+    BOOL pfCallerFreeProvOrCryptKey;
+    HCRYPTPROV_OR_NCRYPT_KEY_HANDLE codeAuth = NULL;
     HANDLE hDfu = INVALID_HANDLE_VALUE;
     HANDLE hDfuFile = INVALID_HANDLE_VALUE;
     DFUIMAGEELEMENT dfuImageElement = { 0 };
     BCRYPT_ALG_HANDLE hSha256 = NULL;
     std::exception_ptr pendingException = NULL;
 
-
     try
     {
         if ((retVal = BCryptOpenAlgorithmProvider(&hSha256, BCRYPT_SHA256_ALGORITHM, NULL, 0)) != 0)
         {
             throw retVal;
+        }
+
+        if (!CryptAcquireCertificatePrivateKey(appAuthCert, CRYPT_ACQUIRE_SILENT_FLAG | CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG, NULL, &codeAuth, &dwKeySpec, &pfCallerFreeProvOrCryptKey))
+        {
+            throw DICE_INVALID_PARAMETER;
         }
 
         std::string hexFileName;
@@ -779,6 +1148,159 @@ void CreateDiceApplication(
                 throw retVal;
             }
             PrintAppInfo(sigHdr);
+
+            if(!logTableName.empty())
+            {
+                std::string logLine;
+                std::string dataStr;
+
+                //AppName
+                logLine += std::string(sigHdr->s.sign.name, sigHdr->s.sign.name + strlen(sigHdr->s.sign.name)) + ", ";
+                //AppSize
+                dataStr.resize(10);
+                sprintf((char*)dataStr.c_str(), "%d", sigHdr->s.sign.codeSize);
+                dataStr.resize(strlen(dataStr.c_str()));
+                logLine += dataStr + ", ";
+                //AppVersion
+                dataStr.resize(10);
+                sprintf((char*)dataStr.c_str(), "%d.%d", sigHdr->s.sign.version >> 16, sigHdr->s.sign.version & 0x0000ffff);
+                dataStr.resize(strlen(dataStr.c_str()));
+                logLine += dataStr + ", ";
+                //IssueDate
+                FILETIME issueTime = ConvertWinTimeStamp(sigHdr->s.sign.issueDate);
+                SYSTEMTIME issueTimeInfo = {0};
+                FileTimeToSystemTime(&issueTime, &issueTimeInfo);
+                dataStr.resize(60);
+                sprintf((char*)dataStr.c_str(), "%04d.%02d.%02d-%02d:%02d:%02d", issueTimeInfo.wYear, issueTimeInfo.wMonth, issueTimeInfo.wDay, issueTimeInfo.wHour, issueTimeInfo.wMinute, issueTimeInfo.wSecond);
+                dataStr.resize(strlen(dataStr.c_str()));
+                logLine += dataStr + ", ";
+                //AppDigest
+                dataStr.clear();
+                dataStr.resize(sizeof(sigHdr->s.sign.appDigest) * 2 + 1);
+                for (UINT32 n = 0; n < sizeof(sigHdr->s.sign.appDigest); n++)
+                {
+                    sprintf((char*)&dataStr.c_str()[2 * n], "%02x", sigHdr->s.sign.appDigest[n]);
+                }
+                dataStr.resize(sizeof(sigHdr->s.sign.appDigest) * 2);
+                logLine += "0x" + dataStr + ", ";
+                //AlternateDigest
+                dataStr.clear();
+                dataStr.resize(sizeof(sigHdr->s.sign.alternateDigest) * 2 + 1);
+                for (UINT32 n = 0; n < sizeof(sigHdr->s.sign.alternateDigest); n++)
+                {
+                    sprintf((char*)&dataStr.c_str()[2 * n], "%02x", sigHdr->s.sign.alternateDigest[n]);
+                }
+                dataStr.resize(sizeof(sigHdr->s.sign.alternateDigest) * 2);
+                logLine += "0x" + dataStr + ", ";
+                //AppAuthroityCertKeyId
+                DWORD required = 0;
+                std::vector<BYTE> dataVal;
+                dataStr.clear();
+                for (UINT32 n = 0; n < appAuthCert->pCertInfo->cExtension; n++)
+                {
+                    if (!strcmp(appAuthCert->pCertInfo->rgExtension[n].pszObjId, szOID_SUBJECT_KEY_IDENTIFIER))
+                    {
+                        required = 0;
+                        if (!CryptDecodeObject(X509_ASN_ENCODING, szOID_SUBJECT_KEY_IDENTIFIER, appAuthCert->pCertInfo->rgExtension[n].Value.pbData, appAuthCert->pCertInfo->rgExtension[n].Value.cbData, CRYPT_DECODE_NOCOPY_FLAG, NULL, &required))
+                        {
+                            throw GetLastError();
+                        }
+                        dataVal.resize(required);
+                        if (!CryptDecodeObject(X509_ASN_ENCODING, szOID_SUBJECT_KEY_IDENTIFIER, appAuthCert->pCertInfo->rgExtension[n].Value.pbData, appAuthCert->pCertInfo->rgExtension[n].Value.cbData, CRYPT_DECODE_NOCOPY_FLAG, dataVal.data(), &required))
+                        {
+                            throw GetLastError();
+                        }
+                        PCRYPT_INTEGER_BLOB keyId = (PCRYPT_INTEGER_BLOB)dataVal.data();
+                        dataStr.resize(keyId->cbData * 2 + 1);
+                        for (UINT32 m = 0; m < keyId->cbData; m++)
+                        {
+                            sprintf((char*)&dataStr.c_str()[m * 2], "%02x", keyId->pbData[m]);
+                        }
+                        dataStr.resize(keyId->cbData * 2);
+                        logLine += "0x" + dataStr + ", ";
+                        break;
+                    }
+                }
+                //AppAuthoritySubjectName
+                required = 0;
+                dataStr.clear();
+                if (!CryptDecodeObject(X509_ASN_ENCODING, X509_NAME, appAuthCert->pCertInfo->Subject.pbData, appAuthCert->pCertInfo->Subject.cbData, CRYPT_DECODE_NOCOPY_FLAG, NULL, &required))
+                {
+                    throw GetLastError();
+                }
+                dataVal.resize(required);
+                if (!CryptDecodeObject(X509_ASN_ENCODING, X509_NAME, appAuthCert->pCertInfo->Subject.pbData, appAuthCert->pCertInfo->Subject.cbData, CRYPT_DECODE_NOCOPY_FLAG, dataVal.data(), &required))
+                {
+                    throw GetLastError();
+                }
+                PCERT_NAME_INFO nameInfo = (PCERT_NAME_INFO)dataVal.data();
+                for (UINT32 n = 0; n < nameInfo->cRDN; n++)
+                {
+                    if (n > 0)
+                    {
+                        dataStr += " ";
+                    }
+                    for (UINT32 m = 0; m < nameInfo->rgRDN[n].cRDNAttr; m++)
+                    {
+                        if (!strcmp(nameInfo->rgRDN[n].rgRDNAttr[m].pszObjId, szOID_COMMON_NAME))
+                        {
+                            dataStr += "CN=";
+                        }
+                        else if (!strcmp(nameInfo->rgRDN[n].rgRDNAttr[m].pszObjId, szOID_ORGANIZATION_NAME))
+                        {
+                            dataStr += "O=";
+                        }
+                        else if (!strcmp(nameInfo->rgRDN[n].rgRDNAttr[m].pszObjId, szOID_COUNTRY_NAME))
+                        {
+                            dataStr += "C=";
+                        }
+                        else
+                        {
+                            dataStr += nameInfo->rgRDN[n].rgRDNAttr[m].pszObjId;
+                        }
+                        std::string name(nameInfo->rgRDN[n].rgRDNAttr[m].Value.cbData, 0);
+                        if (nameInfo->rgRDN[n].rgRDNAttr[m].Value.pbData[1] != 0) // This is a dirty hack
+                        {
+                            strncpy((char*)name.c_str(), (const char*)nameInfo->rgRDN[n].rgRDNAttr[m].Value.pbData, nameInfo->rgRDN[n].rgRDNAttr[m].Value.cbData);
+                        }
+                        else
+                        {
+                            WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, (LPWCH)nameInfo->rgRDN[n].rgRDNAttr[m].Value.pbData, nameInfo->rgRDN[n].rgRDNAttr[m].Value.cbData, (LPSTR)name.c_str(), name.size(), NULL, NULL);
+                        }
+                        name.resize(strlen(name.c_str()));
+                        dataStr += name;
+                    }
+                }
+                logLine += dataStr + ", ";
+                //AppAuthorityCertSerial
+                dataStr.clear();
+                dataStr.resize(appAuthCert->pCertInfo->SerialNumber.cbData * 2 + 1);
+                for (UINT32 n = 0; n < appAuthCert->pCertInfo->SerialNumber.cbData; n++)
+                {
+                    sprintf((char*)&dataStr.c_str()[n * 2], "%02x", appAuthCert->pCertInfo->SerialNumber.pbData[n]);
+                }
+                dataStr.resize(appAuthCert->pCertInfo->SerialNumber.cbData * 2);
+                logLine += "0x" + dataStr + ", ";
+                //AppAuthorityThumbprint
+                dataStr.clear();
+                dataVal = CertThumbPrint(appAuthCert);
+                dataStr.resize(dataVal.size() * 2 + 1);
+                for (UINT32 n = 0; n < dataVal.size(); n++)
+                {
+                    sprintf((char*)&dataStr.c_str()[n * 2], "%02x", dataVal.data()[n]);
+                }
+                dataStr.resize(dataVal.size() * 2);
+                logLine += "0x" + dataStr;
+                // Write Log
+                logLine += "\n";
+                std::unique_ptr<std::remove_pointer<HANDLE>::type, decltype(&::CloseHandle)> hFile(::CreateFile(logTableName.c_str(), GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL), &::CloseHandle);
+                DWORD bytesWritten = 0;
+                SetFilePointer(hFile.get(), 0, NULL, FILE_END);
+                if (!WriteFile(hFile.get(), logLine.c_str(), logLine.size(), &bytesWritten, NULL))
+                {
+                    throw GetLastError();
+                }
+            }
         }
         catch (const std::exception& e)
         {
@@ -803,6 +1325,18 @@ void CreateDiceApplication(
     if ((retVal = STDFUFILES_DestroyImage(&hDfu)) != STDFUFILES_NOERROR)
     {
         throw retVal;
+    }
+
+    if ((codeAuth) && (pfCallerFreeProvOrCryptKey))
+    {
+        if (dwKeySpec == CERT_NCRYPT_KEY_SPEC)
+        {
+            NCryptFreeObject(codeAuth);
+        }
+        else
+        {
+            CryptReleaseContext(codeAuth, 0);
+        }
     }
 
     if (hSha256)
@@ -974,7 +1508,7 @@ void GenerateCertSample(
         X509CompleteCert(&cerCtx, &x509DeviceCertData);
 
         cerBuffer.resize(cerCtx.Position);
-        cerBuffer = IssueDeviceCertificate(cerBuffer, deviceAuthCert, dwKeySpec, deviceAuth);
+        cerBuffer = IssueDeviceCertificate(cerBuffer, deviceAuthCert, dwKeySpec, deviceAuth, NULL);
         cerCtx.Buffer = cerBuffer.data();
         cerCtx.Length = cerBuffer.size();
         cerCtx.Position = cerBuffer.size();
@@ -1087,7 +1621,6 @@ void RunSIP(std::unordered_map<std::wstring, std::wstring> param)
     DWORD dwKeySpec;
     BOOL pfCallerFreeProvOrCryptKey;
     HCRYPTPROV_OR_NCRYPT_KEY_HANDLE deviceAuth = NULL;
-    BCRYPT_KEY_HANDLE codeAuth = NULL;
     BOOL noClear = false;
     UINT32 rollBack = -1;
 
@@ -1144,14 +1677,6 @@ void RunSIP(std::unordered_map<std::wstring, std::wstring> param)
             {
                 throw DICE_INVALID_PARAMETER;
             }
-            if (!CryptImportPublicKeyInfoEx2(X509_ASN_ENCODING, &hCert->pCertInfo->SubjectPublicKeyInfo, 0, NULL, &codeAuth))
-            {
-                throw DICE_INVALID_PARAMETER;
-            }
-            CertCloseStore(hStore, 0);
-            hStore = NULL;
-            CertFreeCertificateContext(hCert);
-            hCert = NULL;
         }
         if (param.find(L"-noclear") != param.end())
         {
@@ -1161,7 +1686,7 @@ void RunSIP(std::unordered_map<std::wstring, std::wstring> param)
         {
             swscanf_s(it->second.c_str(), L"%d", &rollBack);
         }
-        SignDiceIdentityPackage(fileName, hDevAuthCert, dwKeySpec, deviceAuth, codeAuth, noClear, rollBack);
+        SignDiceIdentityPackage(fileName, hDevAuthCert, dwKeySpec, deviceAuth, hCert, noClear, rollBack);
     }
 
     catch (const std::exception& e)
@@ -1182,11 +1707,6 @@ void RunSIP(std::unordered_map<std::wstring, std::wstring> param)
     if (hDevAuthCert)
     {
         CertFreeCertificateContext(hDevAuthCert);
-    }
-
-    if (codeAuth)
-    {
-        BCryptDestroyKey(codeAuth);
     }
 
     if ((deviceAuth) && (pfCallerFreeProvOrCryptKey))
@@ -1243,12 +1763,10 @@ void RunCAP(std::unordered_map<std::wstring, std::wstring> param)
     std::wstring hexName(param.find(L"00")->second);
     HCERTSTORE hStore = NULL;
     PCCERT_CONTEXT hCert = NULL;
-    DWORD dwKeySpec;
-    BOOL pfCallerFreeProvOrCryptKey;
-    HCRYPTPROV_OR_NCRYPT_KEY_HANDLE codeAuth = NULL;
     std::vector<BYTE> alternateDigest;
     UINT32 version = -1;
     UINT32 timeStamp = -1;
+    std::wstring logTable;
 
     try
     {
@@ -1276,10 +1794,6 @@ void RunCAP(std::unordered_map<std::wstring, std::wstring> param)
             {
                 throw DICE_INVALID_PARAMETER;
             }
-            if (!CryptAcquireCertificatePrivateKey(hCert, CRYPT_ACQUIRE_SILENT_FLAG | CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG, NULL, &codeAuth, &dwKeySpec, &pfCallerFreeProvOrCryptKey))
-            {
-                throw DICE_INVALID_PARAMETER;
-            }
         }
         if ((it = param.find(L"-d")) != param.end())
         {
@@ -1297,7 +1811,11 @@ void RunCAP(std::unordered_map<std::wstring, std::wstring> param)
         {
             swscanf_s(it->second.c_str(), L"%d", &timeStamp);
         }
-        CreateDiceApplication(hexName, codeAuth, alternateDigest, version, timeStamp);
+        if ((it = param.find(L"-lt")) != param.end())
+        {
+            logTable = it->second.c_str();
+        }
+        CreateDiceApplication(hexName, logTable, hCert, alternateDigest, version, timeStamp);
     }
 
     catch (const std::exception& e)
@@ -1313,18 +1831,6 @@ void RunCAP(std::unordered_map<std::wstring, std::wstring> param)
     if (hCert)
     {
         CertFreeCertificateContext(hCert);
-    }
-
-    if ((codeAuth) && (pfCallerFreeProvOrCryptKey))
-    {
-        if (dwKeySpec == CERT_NCRYPT_KEY_SPEC)
-        {
-            NCryptFreeObject(codeAuth);
-        }
-        else
-        {
-            CryptReleaseContext(codeAuth, 0);
-        }
     }
 
     if (pendingException != NULL)
@@ -1437,7 +1943,7 @@ void PrintHelp(void)
     wprintf(L"Calculate Certificate Thumbprint:\nCCT certFile.cer\n");
     wprintf(L"Sign DeviceID Package:\nSIP [dfuFileName] [-at=DevAuthCertTP | -af=DevAuthCertFile] { -ct=CodeAuthCertTP | -cf=CodeAuthCertFile | -noClear | -rollBack=0 }\n");
     wprintf(L"Export Certificate Package:\nECP [dfuFileName]\n");
-    wprintf(L"Create APP Package:\nCAP [hexFileName] { -ct=CodeAuthCertTP | -cf=CodeAuthCertFile | -d=alternateDigest | -version=0 | -timeStamp=0 }\n");
+    wprintf(L"Create APP Package:\nCAP [hexFileName] { -ct=CodeAuthCertTP | -cf=CodeAuthCertFile | -d=alternateDigest | -version=0 | -timeStamp=0 | -lt=LogFile.csv}\n");
     wprintf(L"Generate Sample Cert Chain:\nSSC [Name] [-at=DevAuthCertTP | -af=DevAuthCertFile]");
 }
 
