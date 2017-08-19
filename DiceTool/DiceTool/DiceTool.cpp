@@ -468,7 +468,14 @@ void LogDeviceIdentity(
                 dataStr += nameInfo->rgRDN[n].rgRDNAttr[m].pszObjId;
             }
             std::string name(nameInfo->rgRDN[n].rgRDNAttr[m].Value.cbData, 0);
-            WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, (LPWCH)nameInfo->rgRDN[n].rgRDNAttr[m].Value.pbData, nameInfo->rgRDN[n].rgRDNAttr[m].Value.cbData, (LPSTR)name.c_str(), name.size(), NULL, NULL);
+            if (nameInfo->rgRDN[n].rgRDNAttr[m].Value.pbData[1] != 0) // This is a dirty hack
+            {
+                strncpy((char*)name.c_str(), (const char*)nameInfo->rgRDN[n].rgRDNAttr[m].Value.pbData, nameInfo->rgRDN[n].rgRDNAttr[m].Value.cbData);
+            }
+            else
+            {
+                WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, (LPWCH)nameInfo->rgRDN[n].rgRDNAttr[m].Value.pbData, nameInfo->rgRDN[n].rgRDNAttr[m].Value.cbData, (LPSTR)name.c_str(), name.size(), NULL, NULL);
+            }
             name.resize(strlen(name.c_str()));
             dataStr += name;
         }
